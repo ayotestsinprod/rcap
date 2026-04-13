@@ -71,6 +71,15 @@ const DEAL_STATUSES = [
   "closed",
 ] as const;
 
+const DEAL_TYPES = [
+  "equity deal",
+  "debt deal",
+  "invoice finance",
+  "senior debt",
+  "mezzanine debt",
+  "bridging",
+] as const;
+
 function pickMany<T extends readonly string[]>(
   pool: T,
   min: number,
@@ -109,6 +118,7 @@ export type ContactRow = {
 export type DealRow = {
   title: string;
   size: number;
+  deal_type: string;
   sector: string;
   structure: string;
   status: string;
@@ -191,6 +201,7 @@ export function createDeals(num: number): DealRow[] {
     rows.push({
       title: `${company} — ${theme}`,
       size: faker.number.int({ min: 5, max: 250 }) * 1_000_000,
+      deal_type: pickOne(DEAL_TYPES),
       sector: pickOne(SECTORS),
       structure: pickOne(DEAL_STRUCTURES),
       status: pickOne(DEAL_STATUSES),
@@ -314,6 +325,7 @@ function extractionForKind(
         payload: {
           title: `${faker.company.name()} — growth round`,
           size: faker.number.int({ min: 5, max: 150 }) * 1_000_000,
+          dealType: pickOne(DEAL_TYPES),
           structure: pickOne(DEAL_STRUCTURES),
           sector: pickOne(SECTORS),
           status: pickOne(DEAL_STATUSES),

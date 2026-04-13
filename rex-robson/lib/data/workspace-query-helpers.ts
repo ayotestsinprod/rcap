@@ -101,26 +101,31 @@ export async function fetchDealsByPattern(
   limit: number,
 ): Promise<Record<string, unknown>[]> {
   const cap = Math.min(Math.max(1, limit), 25);
-  const [dt, dn, ds, dst] = await Promise.all([
+  const [dt, dn, ds, dst, ddt] = await Promise.all([
     supabase
       .from("deals")
-      .select("id,title,size,sector,structure,status,notes")
+      .select("id,title,size,deal_type,sector,structure,status,notes")
       .ilike("title", pattern)
       .limit(cap),
     supabase
       .from("deals")
-      .select("id,title,size,sector,structure,status,notes")
+      .select("id,title,size,deal_type,sector,structure,status,notes")
       .ilike("notes", pattern)
       .limit(cap),
     supabase
       .from("deals")
-      .select("id,title,size,sector,structure,status,notes")
+      .select("id,title,size,deal_type,sector,structure,status,notes")
       .ilike("sector", pattern)
       .limit(cap),
     supabase
       .from("deals")
-      .select("id,title,size,sector,structure,status,notes")
+      .select("id,title,size,deal_type,sector,structure,status,notes")
       .ilike("structure", pattern)
+      .limit(cap),
+    supabase
+      .from("deals")
+      .select("id,title,size,deal_type,sector,structure,status,notes")
+      .ilike("deal_type", pattern)
       .limit(cap),
   ]);
   return take(
@@ -129,6 +134,7 @@ export async function fetchDealsByPattern(
       ...(dn.data ?? []),
       ...(ds.data ?? []),
       ...(dst.data ?? []),
+      ...(ddt.data ?? []),
     ]),
     cap,
   ) as Record<string, unknown>[];

@@ -14,6 +14,7 @@ export type WorkspaceDealRow = {
   id: string;
   title: string;
   size: number | null;
+  deal_type: string | null;
   sector: string | null;
   structure: string | null;
   status: string | null;
@@ -62,7 +63,7 @@ export async function getWorkspaceLists(): Promise<WorkspaceLists> {
         .limit(LIST_LIMIT),
       client
         .from("deals")
-        .select("id,title,size,sector,structure,status")
+        .select("id,title,size,deal_type,sector,structure,status")
         .or("status.is.null,status.not.in.(passed,closed)")
         .order("created_at", { ascending: false })
         .limit(LIST_LIMIT),

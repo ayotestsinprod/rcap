@@ -75,11 +75,11 @@ insert into public.contacts (
     'event'
   );
 
-insert into public.deals (title, size, sector, structure, status, notes) values
-  ('Project Atlas — B2B payments platform', 28000000, 'fintech', 'Series B preferred', 'diligence', 'Strong unit economics; key risk is enterprise sales cycle length.'),
-  ('Lumen Analytics recapitalization', 120000000, 'saas', 'majority_recap', 'ioi', 'Sponsor exploring add-on acquisitions in marketing analytics.'),
-  ('Harbor Freight co-invest (secondary)', 45000000, 'logistics', 'secondary', 'passed', 'Passed on pricing; staying in touch for future stapled secondaries.'),
-  ('Midwest Cold Storage platform', 85000000, 'industrials', 'buyout', 'live', 'Roll-up of regional cold chain assets; environmental capex plan in data room.');
+insert into public.deals (title, size, deal_type, sector, structure, status, notes) values
+  ('Project Atlas — B2B payments platform', 28000000, 'equity deal', 'fintech', 'Series B preferred', 'diligence', 'Strong unit economics; key risk is enterprise sales cycle length.'),
+  ('Lumen Analytics recapitalization', 120000000, 'senior debt', 'saas', 'majority_recap', 'ioi', 'Sponsor exploring add-on acquisitions in marketing analytics.'),
+  ('Harbor Freight co-invest (secondary)', 45000000, 'debt deal', 'logistics', 'secondary', 'passed', 'Passed on pricing; staying in touch for future stapled secondaries.'),
+  ('Midwest Cold Storage platform', 85000000, 'bridging', 'industrials', 'buyout', 'live', 'Roll-up of regional cold chain assets; environmental capex plan in data room.');
 
 insert into public.rex_inbound_emails (
   id, received_at, from_name, from_address, to_addresses, subject, body_text, snippet, external_message_id, thread_participant_count
@@ -140,7 +140,7 @@ insert into public.rex_email_extractions (
     'Bridging — Manchester logistics asset',
     '~£8M · 12 month term · mentioned as live requirement',
     null,
-    '{"title":"Bridging — Manchester logistics asset","size":8000000,"structure":"bridging","sector":"logistics","status":"live","notes":"12 month term; live requirement per thread."}'::jsonb
+    '{"title":"Bridging — Manchester logistics asset","size":8000000,"dealType":"bridging","structure":"bridging","sector":"logistics","status":"live","notes":"12 month term; live requirement per thread."}'::jsonb
   );
 
 insert into public.rex_inbound_email_attachments (
