@@ -4,6 +4,7 @@ import {
   Building2,
   FileUp,
   LayoutGrid,
+  Mail,
   MessageCircle,
   Sparkles,
   Users,
@@ -14,6 +15,7 @@ const navItems = [
   { id: "contacts", label: "Contacts", icon: Users },
   { id: "organisations", label: "Organisations", icon: Building2 },
   { id: "deal-canvas", label: "Deal Canvas", icon: LayoutGrid },
+  { id: "emails", label: "Emails", icon: Mail },
   { id: "suggestions", label: "Suggestions", icon: Sparkles },
   { id: "upload", label: "Upload & Import", icon: FileUp },
 ] as const;

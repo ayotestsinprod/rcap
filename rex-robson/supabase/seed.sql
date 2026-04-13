@@ -1,6 +1,8 @@
 -- Static sample data for SQL Editor / supabase db reset.
 -- For repeatable, count-driven fake data use: npm run db:seed -- --help
--- Order: contacts reference organisations; deals are standalone.
+-- Order: contacts reference organisations; deals are standalone; attachments reference emails.
+truncate table public.rex_inbound_email_attachments restart identity;
+truncate table public.rex_inbound_emails restart identity;
 truncate table public.contacts restart identity;
 truncate table public.deals restart identity;
 truncate table public.organisations restart identity;
@@ -76,3 +78,40 @@ insert into public.deals (title, size, sector, structure, status, notes) values
   ('Lumen Analytics recapitalization', 120000000, 'saas', 'majority_recap', 'ioi', 'Sponsor exploring add-on acquisitions in marketing analytics.'),
   ('Harbor Freight co-invest (secondary)', 45000000, 'logistics', 'secondary', 'passed', 'Passed on pricing; staying in touch for future stapled secondaries.'),
   ('Midwest Cold Storage platform', 85000000, 'industrials', 'buyout', 'live', 'Roll-up of regional cold chain assets; environmental capex plan in data room.');
+
+insert into public.rex_inbound_emails (
+  id, received_at, from_name, from_address, to_addresses, subject, body_text, snippet, external_message_id
+) values
+  (
+    'e2000000-0000-4000-8000-000000000001',
+    '2026-04-12 14:30:00+00',
+    'Alex Morgan',
+    'alex.morgan@acmecap.com',
+    array['rex@workspace.local']::text[],
+    'Re: Project Atlas — quick question on data room access',
+    E'Hi Rex,\n\nFollowing up on the B2B payments diligence — can you confirm whether the Q1 cohort retention deck is in the data room? We need it for IC on Thursday.\n\nThanks,\nAlex',
+    'Following up on the B2B payments diligence — can you confirm whether the Q1 cohort retention deck is in the data room?',
+    'seed-msg-atlas-001'
+  ),
+  (
+    'e2000000-0000-4000-8000-000000000002',
+    '2026-04-11 09:15:00+00',
+    'Priya Sharma',
+    'priya.sharma@acmecap.com',
+    array['rex@workspace.local']::text[],
+    'Fwd: Intro — Harbor Freight secondary',
+    E'Rex — looping you in. Marcus asked for a one-pager on stapled secondaries. Forwarding the thread below.\n\n— Priya',
+    'Marcus asked for a one-pager on stapled secondaries.',
+    'seed-msg-harbor-002'
+  );
+
+insert into public.rex_inbound_email_attachments (
+  id, email_id, filename, content_type, size_bytes
+) values
+  (
+    'f2000000-0000-4000-8000-000000000001',
+    'e2000000-0000-4000-8000-000000000002',
+    'Harbor_secondary_outline.pdf',
+    'application/pdf',
+    245760
+  );

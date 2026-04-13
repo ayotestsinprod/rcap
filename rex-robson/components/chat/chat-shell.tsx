@@ -9,6 +9,7 @@ import { ChatMessageList, type ChatMessage } from "./chat-message-list";
 import { ChatSidebar, type ChatNavId, type WorkspaceDisplayMode } from "./chat-sidebar";
 import { ContactsBrowsePanel } from "./contacts-browse-panel";
 import { DealsBrowsePanel } from "./deals-browse-panel";
+import { EmailsBrowsePanel } from "./emails-browse-panel";
 import { OrganisationsBrowsePanel } from "./organisations-browse-panel";
 import { SuggestionsDataPanel } from "./workspace-data-panels";
 
@@ -183,7 +184,7 @@ export function ChatShell({
         </header>
         <main
           className={
-            activeNav === "ask"
+            activeNav === "ask" || activeNav === "emails"
               ? "flex min-h-0 flex-1 flex-col overflow-hidden"
               : "flex min-h-0 flex-1 flex-col overflow-y-auto"
           }
@@ -204,6 +205,8 @@ export function ChatShell({
             <OrganisationsBrowsePanel />
           ) : activeNav === "deal-canvas" ? (
             <DealsBrowsePanel />
+          ) : activeNav === "emails" ? (
+            <EmailsBrowsePanel />
           ) : activeNav === "suggestions" ? (
             effectiveStats.suggestionsPendingCount === 0 ? (
               <RexVoicePanel title="Suggestions" message={rexEmptySuggestions} />
