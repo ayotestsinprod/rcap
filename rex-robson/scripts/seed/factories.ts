@@ -115,6 +115,14 @@ export type DealRow = {
   notes: string;
 };
 
+export type RexTaskRow = {
+  title: string;
+  detail: string | null;
+  status: "pending" | "running" | "done" | "dismissed";
+  source: "manual" | "meeting_note" | "email" | "import";
+  due_at: string | null;
+};
+
 export function createOrganisations(num: number): OrganisationRow[] {
   const rows: OrganisationRow[] = [];
   for (let i = 0; i < num; i++) {
@@ -187,6 +195,46 @@ export function createDeals(num: number): DealRow[] {
       structure: pickOne(DEAL_STRUCTURES),
       status: pickOne(DEAL_STATUSES),
       notes: faker.lorem.sentences({ min: 1, max: 3 }),
+    });
+  }
+  return rows;
+}
+
+export function createRexTasks(num: number): RexTaskRow[] {
+  const rows: RexTaskRow[] = [];
+  const verb = ["Draft", "Prepare", "Review", "Compile", "Send"];
+  const nouns = [
+    "deal memo",
+    "follow-up list",
+    "intro brief",
+    "lender fit summary",
+    "meeting recap",
+  ];
+  for (let i = 0; i < num; i += 1) {
+    const title = `${faker.helpers.arrayElement(verb)} ${faker.helpers.arrayElement(nouns)} for ${faker.company.name()}`;
+    const source = faker.helpers.arrayElement([
+      "manual",
+      "meeting_note",
+      "email",
+      "import",
+    ] as const);
+    const status = faker.helpers.arrayElement([
+      "pending",
+      "pending",
+      "running",
+      "done",
+      "dismissed",
+    ] as const);
+    const dueAt =
+      faker.datatype.boolean({ probability: 0.6 }) && status !== "done"
+        ? faker.date.soon({ days: 10 }).toISOString()
+        : null;
+    rows.push({
+      title,
+      detail: faker.lorem.sentence({ min: 8, max: 20 }),
+      source,
+      status,
+      due_at: dueAt,
     });
   }
   return rows;
@@ -295,10 +343,22 @@ export type RexInboundEmailDataset = {
 };
 
 /** Faker-driven inbox rows plus optional pending extractions and attachment metadata. */
-export function createInboundEmailDataset(num: number): RexInboundEmailDataset {
+export function createInboundEmailDataset(
+  num: number,
+  options?: {
+    /** When true, force every generated email to be a meeting/call transcript style row. */
+    callLogsOnly?: boolean;
+    /** Ratio (0..1) of rows generated as call logs when callLogsOnly=false. Default 0.35. */
+    callLogRatio?: number;
+  },
+): RexInboundEmailDataset {
   const emails: RexInboundEmailRow[] = [];
   const extractions: RexEmailExtractionRow[] = [];
   const attachments: RexInboundEmailAttachmentRow[] = [];
+  const callLogsOnly = options?.callLogsOnly === true;
+  const callLogRatio = Number.isFinite(options?.callLogRatio)
+    ? Math.max(0, Math.min(1, Number(options?.callLogRatio)))
+    : 0.35;
 
   const inbox = faker.helpers.arrayElement([
     "rex@workspace.local",
@@ -308,19 +368,62 @@ export function createInboundEmailDataset(num: number): RexInboundEmailDataset {
 
   for (let i = 0; i < num; i++) {
     const id = randomUUID();
-    const fromName = faker.person.fullName();
-    const fromAddress = faker.internet.email({ firstName: fromName.split(" ")[0] });
-    const subject = faker.lorem.sentence({ min: 4, max: 10 }).replace(/\.$/, "");
-    const opening = faker.lorem.sentence({ min: 6, max: 14 });
-    const body = [
-      `Hi Rex,`,
-      "",
-      opening,
-      "",
-      faker.lorem.paragraphs({ min: 1, max: 2 }, "\n\n"),
-      "",
-      `— ${fromName.split(" ")[0]}`,
-    ].join("\n");
+    const isCallLog = callLogsOnly
+      ? true
+      : faker.datatype.boolean({ probability: callLogRatio });
+    const fromName = isCallLog
+      ? faker.helpers.arrayElement([
+          "Otter Assistant",
+          "Zoom AI Companion",
+          "Fireflies Notetaker",
+          "Granola Notes",
+          "Gemini Notes",
+        ])
+      : faker.person.fullName();
+    const fromAddress = isCallLog
+      ? faker.helpers.arrayElement([
+          "notes@otter.ai",
+          "no-reply@zoom.us",
+          "meetings@fireflies.ai",
+          "notes@granola.ai",
+          "workspace-noreply@gemini.google.com",
+        ])
+      : faker.internet.email({ firstName: fromName.split(" ")[0] });
+    const subject = isCallLog
+      ? faker.helpers.arrayElement([
+          `Call with ${faker.company.name()} — meeting notes`,
+          `${faker.person.fullName()} sync transcript`,
+          `Weekly pipeline review call notes`,
+          `Meeting transcript: ${faker.company.name()}`,
+        ])
+      : faker.lorem.sentence({ min: 4, max: 10 }).replace(/\.$/, "");
+    const opening = isCallLog
+      ? faker.helpers.arrayElement([
+          "Transcript attached. Key actions and follow-ups extracted below.",
+          "Here are your meeting notes and action items from today's call.",
+          "Meeting recap generated automatically with suggested next steps.",
+        ])
+      : faker.lorem.sentence({ min: 6, max: 14 });
+    const body = isCallLog
+      ? [
+          `Hi Rex,`,
+          "",
+          opening,
+          "",
+          `Summary: ${faker.lorem.sentence({ min: 10, max: 18 })}`,
+          `Action items: ${faker.lorem.sentence({ min: 8, max: 14 })}`,
+          "",
+          `— ${fromName.split(" ")[0]}`,
+        ].join("\n")
+      : [
+          `Hi Rex,`,
+          "",
+          opening,
+          "",
+          faker.lorem.paragraphs({ min: 1, max: 2 }, "\n\n"),
+          "",
+          `— ${fromName.split(" ")[0]}`,
+        ].join("\n");
     const snippet =
       opening.length > 160 ? `${opening.slice(0, 157)}…` : opening;
 

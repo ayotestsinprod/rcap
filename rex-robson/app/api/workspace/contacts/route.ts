@@ -52,6 +52,11 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const qRaw = url.searchParams.get("q") ?? url.searchParams.get("search") ?? "";
+  const roleRaw = url.searchParams.get("role") ?? "";
+  const organisationTypeRaw =
+    url.searchParams.get("organisationType") ??
+    url.searchParams.get("orgType") ??
+    "";
   const pageRaw = url.searchParams.get("page");
   const sizeRaw = url.searchParams.get("pageSize") ?? url.searchParams.get("limit");
 
@@ -75,12 +80,16 @@ export async function GET(req: Request) {
   }
 
   const search = sanitizeWorkspaceListSearch(qRaw);
+  const role = sanitizeWorkspaceListSearch(roleRaw);
+  const organisationType = sanitizeWorkspaceListSearch(organisationTypeRaw);
 
   try {
     const result = await getWorkspaceContactsPage({
       search,
       page,
       pageSize,
+      role,
+      organisationType,
     });
     return NextResponse.json(result);
   } catch (e) {

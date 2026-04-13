@@ -11,6 +11,7 @@ import { ContactsBrowsePanel } from "./contacts-browse-panel";
 import { DealsBrowsePanel } from "./deals-browse-panel";
 import { EmailsBrowsePanel } from "./emails-browse-panel";
 import { OrganisationsBrowsePanel } from "./organisations-browse-panel";
+import { RexTasksPanel } from "./rex-tasks-panel";
 import { UploadImportPanel } from "./upload-import-panel";
 import { SuggestionsDataPanel } from "./workspace-data-panels";
 
@@ -185,7 +186,9 @@ export function ChatShell({
         </header>
         <main
           className={
-            activeNav === "ask" || activeNav === "emails"
+            activeNav === "ask" ||
+            activeNav === "emails" ||
+            activeNav === "call-logs"
               ? "flex min-h-0 flex-1 flex-col overflow-hidden"
               : "flex min-h-0 flex-1 flex-col overflow-y-auto"
           }
@@ -208,6 +211,10 @@ export function ChatShell({
             <DealsBrowsePanel />
           ) : activeNav === "emails" ? (
             <EmailsBrowsePanel />
+          ) : activeNav === "call-logs" ? (
+            <EmailsBrowsePanel mailbox="call_logs" />
+          ) : activeNav === "tasks" ? (
+            <RexTasksPanel />
           ) : activeNav === "suggestions" ? (
             effectiveStats.suggestionsPendingCount === 0 ? (
               <RexVoicePanel title="Suggestions" message={rexEmptySuggestions} />

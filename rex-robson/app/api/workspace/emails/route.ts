@@ -11,6 +11,7 @@ export async function GET(req: Request) {
   const qRaw = url.searchParams.get("q") ?? url.searchParams.get("search") ?? "";
   const pageRaw = url.searchParams.get("page");
   const sizeRaw = url.searchParams.get("pageSize") ?? url.searchParams.get("limit");
+  const mailboxRaw = url.searchParams.get("mailbox");
 
   const page = pageRaw ? Number.parseInt(pageRaw, 10) : 1;
   const pageSize = sizeRaw
@@ -32,12 +33,25 @@ export async function GET(req: Request) {
   }
 
   const search = sanitizeWorkspaceListSearch(qRaw);
+  const mailbox =
+    mailboxRaw === "call_logs"
+      ? "call_logs"
+      : mailboxRaw === "emails" || mailboxRaw == null
+        ? "emails"
+        : null;
+  if (mailbox === null) {
+    return NextResponse.json(
+      { error: "mailbox must be 'emails' or 'call_logs'" },
+      { status: 400 },
+    );
+  }
 
   try {
     const result = await getWorkspaceEmailsPage({
       search,
       page,
       pageSize,
+      mailbox,
     });
     return NextResponse.json(result);
   } catch (e) {

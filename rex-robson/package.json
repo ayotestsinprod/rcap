@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "tsx scripts/seed/index.ts",
-    "db:seed:emails": "tsx scripts/seed/emails.ts"
+    "db:seed:emails": "tsx scripts/seed/emails.ts",
+    "db:seed:call-logs": "tsx scripts/seed/callLogs.ts",
+    "db:seed:tasks": "tsx scripts/seed/tasks.ts"
   },
   "dependencies": {
     "@fontsource/playfair-display": "^5.2.8",

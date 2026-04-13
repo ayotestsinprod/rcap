@@ -30,6 +30,16 @@ function muted(line: string | null | undefined) {
   );
 }
 
+function initials(name: string) {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter((x) => x.length > 0)
+    .slice(0, 2);
+  if (parts.length === 0) return "?";
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("");
+}
+
 type ApiOk = { rows: WorkspaceContactPageRow[]; total: number };
 type ApiErr = { error?: string; hint?: string };
 
@@ -62,6 +72,11 @@ export function ContactsBrowsePanel() {
   const [newRole, setNewRole] = useState("");
   const [newGeography, setNewGeography] = useState("");
   const [newNotes, setNewNotes] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [activeOrganisationType, setActiveOrganisationType] = useState("");
+  const [organisationTypeOptions, setOrganisationTypeOptions] = useState<string[]>(
+    [],
+  );
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(queryInput.trim()), 320);
@@ -70,7 +85,7 @@ export function ContactsBrowsePanel() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQuery]);
+  }, [debouncedQuery, activeOrganisationType]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,6 +96,9 @@ export function ContactsBrowsePanel() {
     });
     if (debouncedQuery !== "") {
       params.set("q", debouncedQuery);
+    }
+    if (activeOrganisationType !== "") {
+      params.set("organisationType", activeOrganisationType);
     }
     try {
       const res = await fetch(`/api/workspace/contacts?${params.toString()}`);
@@ -103,7 +121,7 @@ export function ContactsBrowsePanel() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedQuery, pageSize]);
+  }, [page, debouncedQuery, pageSize, activeOrganisationType]);
 
   useEffect(() => {
     void load();
@@ -134,6 +152,32 @@ export function ContactsBrowsePanel() {
       cancelled = true;
     };
   }, [formOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/workspace/organisations?page=1&pageSize=${WORKSPACE_ORGANISATIONS_PAGE_SIZE_MAX}`,
+        );
+        const data = (await res.json()) as { rows?: WorkspaceOrganisationPageRow[] };
+        if (!res.ok || cancelled) return;
+        const values = Array.from(
+          new Set(
+            (data.rows ?? [])
+              .map((x) => x.type?.trim() ?? "")
+              .filter((x) => x.length > 0),
+          ),
+        ).sort((a, b) => a.localeCompare(b));
+        setOrganisationTypeOptions(values);
+      } catch {
+        if (!cancelled) setOrganisationTypeOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -360,6 +404,53 @@ export function ContactsBrowsePanel() {
             className="w-full rounded-lg border border-charcoal/15 bg-cream px-3 py-2 text-sm text-charcoal placeholder:text-charcoal-light/50 outline-none ring-charcoal/20 focus:border-charcoal/25 focus:ring-2"
           />
         </label>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className="rounded-lg border border-charcoal/15 bg-cream px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-cream-light"
+          >
+            {filtersOpen ? "Hide filters" : "Filter by type"}
+          </button>
+          {activeOrganisationType ? (
+            <button
+              type="button"
+              onClick={() => setActiveOrganisationType("")}
+              className="rounded-lg border border-charcoal/15 bg-cream-light px-3 py-1.5 text-xs text-charcoal-light"
+            >
+              Clear: {activeOrganisationType}
+            </button>
+          ) : null}
+        </div>
+        {filtersOpen ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveOrganisationType("")}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                activeOrganisationType === ""
+                  ? "border-charcoal bg-charcoal text-cream"
+                  : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
+              }`}
+            >
+              All
+            </button>
+            {organisationTypeOptions.map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setActiveOrganisationType(type)}
+                className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                  activeOrganisationType === type
+                    ? "border-charcoal bg-charcoal text-cream"
+                    : "border-charcoal/15 bg-cream text-charcoal-light hover:bg-cream-light"
+                }`}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {error ? (
@@ -368,7 +459,7 @@ export function ContactsBrowsePanel() {
         </p>
       ) : null}
 
-      <div className="mt-4 rounded-xl border border-charcoal/[0.08] bg-cream-light/40">
+      <div className="mt-4 rounded-xl border border-charcoal/[0.08] bg-cream-light/40 p-2">
         <ul className="divide-y divide-charcoal/[0.06]">
           {loading
             ? Array.from({ length: pageSize }).map((_, i) => (
@@ -378,20 +469,30 @@ export function ContactsBrowsePanel() {
                 </li>
               ))
             : rows.map((c) => {
-                const sub = [c.role, c.organisation_name, c.geography]
+                const sub = [c.organisation_name, c.role, c.geography]
                   .filter(Boolean)
                   .join(" · ");
                 return (
-                  <li key={c.id}>
+                  <li key={c.id} className="py-1.5">
                     <button
                       type="button"
                       onClick={() => void openEdit(c)}
-                      className={`${WORKSPACE_BROWSE_ROW_BUTTON_CLASS} py-3`}
+                      className={`${WORKSPACE_BROWSE_ROW_BUTTON_CLASS} rounded-xl border border-charcoal/[0.07] bg-cream px-3 py-3 shadow-[0_1px_0_rgba(10,10,10,0.02)] transition hover:border-charcoal/[0.12] hover:bg-cream-light/40`}
                       aria-label={`Edit ${c.name}`}
                     >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-charcoal">{c.name}</p>
-                        {muted(sub || null)}
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-semibold text-sky-800">
+                          {initials(c.name)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-charcoal">{c.name}</p>
+                          {muted(sub || null)}
+                        </div>
+                        {c.organisation_type ? (
+                          <span className="rounded-full border border-charcoal/10 bg-cream-light px-2 py-0.5 text-xs text-charcoal-light">
+                            {c.organisation_type}
+                          </span>
+                        ) : null}
                       </div>
                     </button>
                   </li>

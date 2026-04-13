@@ -18,6 +18,7 @@ import {
 
 type ApiListOk = { rows: WorkspaceEmailListRow[]; total: number };
 type ApiErr = { error?: string; hint?: string };
+type MailboxMode = "emails" | "call_logs";
 
 type DetailAttachment = {
   id: string;
@@ -82,7 +83,11 @@ function fromLine(row: WorkspaceEmailListRow): string {
   return row.fromAddress;
 }
 
-export function EmailsBrowsePanel() {
+export function EmailsBrowsePanel({
+  mailbox = "emails",
+}: {
+  mailbox?: MailboxMode;
+}) {
   const pageSize = WORKSPACE_EMAILS_PAGE_SIZE_DEFAULT;
   const [queryInput, setQueryInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -117,6 +122,7 @@ export function EmailsBrowsePanel() {
       params.set("q", debouncedQuery);
     }
     try {
+      params.set("mailbox", mailbox);
       const res = await fetch(`/api/workspace/emails?${params.toString()}`);
       const data = (await res.json()) as ApiListOk & ApiErr;
       if (!res.ok) {
@@ -137,7 +143,7 @@ export function EmailsBrowsePanel() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedQuery, pageSize]);
+  }, [page, debouncedQuery, pageSize, mailbox]);
 
   useEffect(() => {
     void loadList();
@@ -228,7 +234,7 @@ export function EmailsBrowsePanel() {
       {/* Inbox list */}
       <div
         className={[
-          "flex min-h-0 w-full shrink-0 flex-col border-charcoal/[0.08] lg:w-[min(100%,380px)] lg:border-r",
+          "flex min-h-0 w-full shrink-0 flex-col border-charcoal/8 lg:w-[min(100%,380px)] lg:border-r",
           selectedId ? "hidden lg:flex" : "flex",
         ].join(" ")}
       >
@@ -236,7 +242,7 @@ export function EmailsBrowsePanel() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <h2 className="font-serif text-xl tracking-tight text-charcoal">
-                Emails
+                {mailbox === "call_logs" ? "Call logs" : "Emails"}
               </h2>
               <p className="mt-1 text-xs text-charcoal-light/80">
                 {loading
@@ -244,7 +250,9 @@ export function EmailsBrowsePanel() {
                   : total === 0
                     ? debouncedQuery
                       ? "No matches for that search."
-                      : "No messages yet. When Rex is copied or forwarded on email, they will appear here."
+                      : mailbox === "call_logs"
+                        ? "No call logs yet. Meeting-note/transcript emails (Otter, Zoom, Fireflies, Granola, Gemini, etc.) will show here."
+                        : "No messages yet. When Rex is copied or forwarded on email, they will appear here."
                     : `Showing ${from}–${to} of ${total}`}
               </p>
             </div>
@@ -272,7 +280,7 @@ export function EmailsBrowsePanel() {
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <ul className="divide-y divide-charcoal/[0.06] border-t border-charcoal/[0.06]">
+          <ul className="divide-y divide-charcoal/6 border-t border-charcoal/6">
             {loading
               ? Array.from({ length: pageSize }).map((_, i) => (
                   <li key={i} className="animate-pulse px-4 py-3 sm:px-6 lg:px-4">
@@ -290,7 +298,7 @@ export function EmailsBrowsePanel() {
                         className={[
                           WORKSPACE_BROWSE_ROW_BUTTON_CLASS,
                           "items-center py-3",
-                          active ? "bg-charcoal/[0.06]" : "",
+                          active ? "bg-charcoal/6" : "",
                         ].join(" ")}
                         aria-current={active ? "true" : undefined}
                       >
@@ -366,11 +374,11 @@ export function EmailsBrowsePanel() {
           </div>
         ) : (
           <>
-            <div className="flex shrink-0 items-center gap-2 border-b border-charcoal/[0.08] px-4 py-3 sm:px-6 lg:px-6">
+            <div className="flex shrink-0 items-center gap-2 border-b border-charcoal/8 px-4 py-3 sm:px-6 lg:px-6">
               <button
                 type="button"
                 onClick={clearSelection}
-                className="rounded-lg p-2 text-charcoal-light hover:bg-charcoal/[0.06] lg:hidden"
+                className="rounded-lg p-2 text-charcoal-light hover:bg-charcoal/6 lg:hidden"
                 aria-label="Back to inbox"
               >
                 <ArrowLeft className="size-5" strokeWidth={1.75} aria-hidden />
@@ -410,7 +418,7 @@ export function EmailsBrowsePanel() {
                       <h3 className="font-serif text-lg font-normal tracking-tight text-charcoal">
                         {detail.subject || "(No subject)"}
                       </h3>
-                      <dl className="mt-4 space-y-2 border-b border-charcoal/[0.08] pb-4 text-sm">
+                      <dl className="mt-4 space-y-2 border-b border-charcoal/8 pb-4 text-sm">
                         <div className="flex flex-wrap gap-x-2 gap-y-1">
                           <dt className="w-20 shrink-0 text-charcoal-light">
                             From
@@ -444,7 +452,7 @@ export function EmailsBrowsePanel() {
                   )}
 
                   {detail.extractions.length > 0 ? (
-                    <div className="mt-6 border-t border-charcoal/[0.08] pt-4">
+                    <div className="mt-6 border-t border-charcoal/8 pt-4">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-charcoal-light/80">
                         Source message
                       </p>
@@ -468,7 +476,7 @@ export function EmailsBrowsePanel() {
                             {a.canDownload ? (
                               <a
                                 href={`/api/workspace/emails/${detail.id}/attachments/${a.id}`}
-                                className="inline-flex max-w-full items-center gap-2 rounded-lg border border-charcoal/15 bg-cream px-3 py-2 text-sm text-charcoal transition-colors hover:bg-charcoal/[0.04]"
+                                className="inline-flex max-w-full items-center gap-2 rounded-lg border border-charcoal/15 bg-cream px-3 py-2 text-sm text-charcoal transition-colors hover:bg-charcoal/4"
                                 target="_blank"
                                 rel="noopener noreferrer"
                               >

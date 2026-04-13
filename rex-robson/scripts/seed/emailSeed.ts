@@ -33,6 +33,8 @@ async function insertChunkedTable<T extends Record<string, unknown>>(
 export type SeedInboundEmailOptions = {
   count: number;
   append: boolean;
+  callLogsOnly?: boolean;
+  callLogRatio?: number;
 };
 
 export type SeedInboundEmailResult = {
@@ -49,7 +51,7 @@ export async function seedInboundEmails(
   supabase: SupabaseClient,
   options: SeedInboundEmailOptions,
 ): Promise<SeedInboundEmailResult> {
-  const { count, append } = options;
+  const { count, append, callLogsOnly, callLogRatio } = options;
 
   if (count <= 0) {
     return { emails: [], extractions: [], attachments: [] };
@@ -59,7 +61,10 @@ export async function seedInboundEmails(
     await deleteAllInboundEmails(supabase);
   }
 
-  const { emails, extractions, attachments } = createInboundEmailDataset(count);
+  const { emails, extractions, attachments } = createInboundEmailDataset(count, {
+    callLogsOnly,
+    callLogRatio,
+  });
 
   await insertChunkedTable(supabase, "rex_inbound_emails", emails);
   if (extractions.length > 0) {

@@ -365,3 +365,67 @@ export async function insertWorkspaceSuggestion(
     body: data.body == null ? null : String(data.body),
   };
 }
+
+export type CreatedRexTaskRow = {
+  id: string;
+  title: string;
+  detail: string | null;
+  status: "pending" | "running" | "done" | "dismissed";
+  source: "manual" | "meeting_note" | "email" | "import";
+  due_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function insertWorkspaceTask(
+  client: SupabaseClient,
+  input: {
+    title: string;
+    detail: string | null;
+    source: "manual" | "meeting_note" | "email" | "import";
+    due_at: string | null;
+  },
+): Promise<CreatedRexTaskRow> {
+  const { data, error } = await client
+    .from("rex_tasks")
+    .insert({
+      title: input.title,
+      detail: input.detail,
+      source: input.source,
+      due_at: input.due_at,
+      status: "pending",
+    })
+    .select("id,title,detail,status,source,due_at,created_at,updated_at")
+    .single();
+
+  if (error) throw error;
+  if (!data) throw new Error("Insert returned no row");
+
+  const statusRaw = data.status;
+  const status =
+    statusRaw === "pending" ||
+    statusRaw === "running" ||
+    statusRaw === "done" ||
+    statusRaw === "dismissed"
+      ? statusRaw
+      : "pending";
+  const sourceRaw = data.source;
+  const source =
+    sourceRaw === "manual" ||
+    sourceRaw === "meeting_note" ||
+    sourceRaw === "email" ||
+    sourceRaw === "import"
+      ? sourceRaw
+      : "manual";
+
+  return {
+    id: String(data.id ?? ""),
+    title: String(data.title ?? ""),
+    detail: data.detail == null ? null : String(data.detail),
+    status,
+    source,
+    due_at: data.due_at == null ? null : String(data.due_at),
+    created_at: data.created_at == null ? "" : String(data.created_at),
+    updated_at: data.updated_at == null ? "" : String(data.updated_at),
+  };
+}

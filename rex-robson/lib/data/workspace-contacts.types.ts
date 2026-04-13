@@ -8,6 +8,7 @@ export type WorkspaceContactPageRow = {
   geography: string | null;
   organisation_id: string | null;
   organisation_name: string | null;
+  organisation_type: string | null;
 };
 
 export type WorkspaceContactsPageResult = {

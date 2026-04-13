@@ -7,6 +7,7 @@
  *   npm run db:seed -- --orgs 5 --contacts 25 --deals 12
  *   npm run db:seed -- --append --contacts 5
  *   npm run db:seed -- --emails 0
+ *   npm run db:seed -- --call-logs 10
  *   npm run db:seed -- --seed 4242
  */
 
@@ -22,11 +23,15 @@ import {
   type OrganisationRow,
 } from "./factories";
 import { seedInboundEmails } from "./emailSeed";
+import { seedCallLogs } from "./callLogSeed";
+import { seedRexTasks } from "./taskSeed";
 import { createServiceSupabase } from "./env";
 
 const DUMMY = "00000000-0000-0000-0000-000000000000";
 
 async function clearTables(supabase: SupabaseClient): Promise<void> {
+  const { error: e0 } = await supabase.from("rex_tasks").delete().neq("id", DUMMY);
+  if (e0) throw e0;
   const { error: e1 } = await supabase
     .from("contacts")
     .delete()
@@ -71,6 +76,8 @@ Options:
   --contacts, -c   Number of contacts (default: 10)
   --deals, -d      Number of deals (default: 5)
   --emails, -e     Number of rex_inbound_emails rows (default: 5; 0 skips email seeding)
+  --call-logs, -l  Number of call-log rows in rex_inbound_emails (default: 4; 0 skips call-log seeding)
+  --tasks, -t      Number of rex_tasks rows (default: 8; 0 skips task seeding)
   --append, -a     Skip clearing tables before insert
   --seed           Faker seed for reproducible runs (number)
   --help, -h       Show this message
@@ -87,6 +94,8 @@ export type SeedOptions = {
   contactCount: number;
   dealCount: number;
   emailCount: number;
+  callLogCount: number;
+  taskCount: number;
   append: boolean;
   fakerSeed?: number;
 };
@@ -99,10 +108,21 @@ export async function seedDatabase(
   contacts: ContactRow[];
   deals: DealRow[];
   emailRows: number;
+  callLogRows: number;
+  taskRows: number;
   extractionRows: number;
   attachmentRows: number;
 }> {
-  const { orgCount, contactCount, dealCount, emailCount, append, fakerSeed } =
+  const {
+    orgCount,
+    contactCount,
+    dealCount,
+    emailCount,
+    callLogCount,
+    taskCount,
+    append,
+    fakerSeed,
+  } =
     options;
 
   if (contactCount > 0 && orgCount === 0) {
@@ -136,14 +156,28 @@ export async function seedDatabase(
     count: emailCount,
     append,
   });
+  const {
+    emails: callLogEmails,
+    extractions: callLogExtractions,
+    attachments: callLogAttachments,
+  } = await seedCallLogs(supabase, {
+    count: callLogCount,
+    append: true,
+  });
+  const tasks = await seedRexTasks(supabase, {
+    count: taskCount,
+    append: true,
+  });
 
   return {
     organisations,
     contacts,
     deals,
     emailRows: emails.length,
-    extractionRows: extractions.length,
-    attachmentRows: attachments.length,
+    callLogRows: callLogEmails.length,
+    taskRows: tasks.length,
+    extractionRows: extractions.length + callLogExtractions.length,
+    attachmentRows: attachments.length + callLogAttachments.length,
   };
 }
 
@@ -155,6 +189,8 @@ async function main(): Promise<void> {
       contacts: { type: "string", short: "c", default: "10" },
       deals: { type: "string", short: "d", default: "5" },
       emails: { type: "string", short: "e", default: "5" },
+      "call-logs": { type: "string", short: "l", default: "4" },
+      tasks: { type: "string", short: "t", default: "8" },
       append: { type: "boolean", short: "a", default: false },
       seed: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
@@ -172,6 +208,8 @@ async function main(): Promise<void> {
   const contactCount = parsePositiveInt(values.contacts, "--contacts");
   const dealCount = parsePositiveInt(values.deals, "--deals");
   const emailCount = parsePositiveInt(values.emails, "--emails");
+  const callLogCount = parsePositiveInt(values["call-logs"], "--call-logs");
+  const taskCount = parsePositiveInt(values.tasks, "--tasks");
   const fakerSeed =
     values.seed !== undefined ? parsePositiveInt(values.seed, "--seed") : undefined;
 
@@ -182,6 +220,8 @@ async function main(): Promise<void> {
     contacts,
     deals,
     emailRows,
+    callLogRows,
+    taskRows,
     extractionRows,
     attachmentRows,
   } = await seedDatabase(supabase, {
@@ -189,17 +229,25 @@ async function main(): Promise<void> {
     contactCount,
     dealCount,
     emailCount,
+    callLogCount,
+    taskCount,
     append: values.append,
     fakerSeed,
   });
 
   const emailLine =
     emailCount > 0
-      ? ` ${emailRows} inbound emails (${extractionRows} extractions, ${attachmentRows} attachments).`
+      ? ` ${emailRows} inbound emails.`
+      : "";
+  const callLogLine = callLogCount > 0 ? ` ${callLogRows} call logs.` : "";
+  const taskLine = taskCount > 0 ? ` ${taskRows} Rex tasks.` : "";
+  const extractionLine =
+    emailCount > 0 || callLogCount > 0
+      ? ` ${extractionRows} extractions, ${attachmentRows} attachments.`
       : "";
 
   console.log(
-    `Seeded ${organisations.length} organisations, ${contacts.length} contacts, ${deals.length} deals.${emailLine}` +
+    `Seeded ${organisations.length} organisations, ${contacts.length} contacts, ${deals.length} deals.${emailLine}${callLogLine}${taskLine}${extractionLine}` +
       (values.append ? " (append mode)" : ""),
   );
 }

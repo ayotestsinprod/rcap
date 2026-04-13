@@ -33,6 +33,8 @@ function parseRpcPayload(data: unknown): WorkspaceContactsPageResult {
         x.organisation_id == null ? null : String(x.organisation_id),
       organisation_name:
         x.organisation_name == null ? null : String(x.organisation_name),
+      organisation_type:
+        x.organisation_type == null ? null : String(x.organisation_type),
     };
   });
   return { rows, total };
@@ -40,7 +42,13 @@ function parseRpcPayload(data: unknown): WorkspaceContactsPageResult {
 
 export async function fetchWorkspaceContactsPageWithClient(
   client: SupabaseClient,
-  params: { search: string | null; page: number; pageSize: number },
+  params: {
+    search: string | null;
+    page: number;
+    pageSize: number;
+    role: string | null;
+    organisationType: string | null;
+  },
 ): Promise<WorkspaceContactsPageResult> {
   const page = Math.max(1, Math.floor(params.page));
   const pageSize = Math.min(
@@ -52,6 +60,8 @@ export async function fetchWorkspaceContactsPageWithClient(
     p_search: params.search ?? "",
     p_page: page,
     p_page_size: pageSize,
+    p_role: params.role ?? "",
+    p_organisation_type: params.organisationType ?? "",
   });
 
   if (error) {
@@ -68,6 +78,8 @@ export async function getWorkspaceContactsPage(params: {
   search: string | null;
   page: number;
   pageSize: number;
+  role: string | null;
+  organisationType: string | null;
 }): Promise<WorkspaceContactsPageResult> {
   const service = tryCreateServiceRoleClient();
   const userScoped = await createServerSupabaseClient();

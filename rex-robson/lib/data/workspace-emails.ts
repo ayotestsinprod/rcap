@@ -106,7 +106,12 @@ function mapAttachmentRow(r: Record<string, unknown>): WorkspaceEmailAttachmentR
 
 export async function fetchWorkspaceEmailsPageWithClient(
   client: SupabaseClient,
-  params: { search: string | null; page: number; pageSize: number },
+  params: {
+    search: string | null;
+    page: number;
+    pageSize: number;
+    mailbox?: "emails" | "call_logs";
+  },
 ): Promise<WorkspaceEmailsPageResult> {
   const page = Math.max(1, Math.floor(params.page));
   const pageSize = Math.min(
@@ -122,6 +127,25 @@ export async function fetchWorkspaceEmailsPageWithClient(
       count: "exact",
     })
     .order("received_at", { ascending: false });
+
+  if (params.mailbox === "call_logs") {
+    q = q.or(
+      [
+        "subject.ilike.%meeting%",
+        "subject.ilike.%call%",
+        "subject.ilike.%notes%",
+        "subject.ilike.%transcript%",
+        "snippet.ilike.%meeting%",
+        "snippet.ilike.%notes%",
+        "snippet.ilike.%transcript%",
+        "from_address.ilike.%otter%",
+        "from_address.ilike.%zoom%",
+        "from_address.ilike.%fireflies%",
+        "from_address.ilike.%granola%",
+        "from_address.ilike.%gemini%",
+      ].join(","),
+    );
+  }
 
   if (params.search) {
     const s = params.search.replace(/,/g, " ").trim();
@@ -170,6 +194,7 @@ export async function getWorkspaceEmailsPage(params: {
   search: string | null;
   page: number;
   pageSize: number;
+  mailbox?: "emails" | "call_logs";
 }): Promise<WorkspaceEmailsPageResult> {
   const service = tryCreateServiceRoleClient();
   const userScoped = await createServerSupabaseClient();
