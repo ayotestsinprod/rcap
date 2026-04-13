@@ -80,7 +80,7 @@ function pickMany<T extends readonly string[]>(
   return faker.helpers.arrayElements([...pool], n);
 }
 
-function pickOne<T extends readonly string[]>(pool: T): string {
+function pickOne<T extends readonly string[]>(pool: T): T[number] {
   return faker.helpers.arrayElement([...pool]);
 }
 
@@ -190,4 +190,192 @@ export function createDeals(num: number): DealRow[] {
     });
   }
   return rows;
+}
+
+const EXTRACTION_KINDS = [
+  "contact",
+  "organisation",
+  "deal_signal",
+  "intro_request",
+] as const;
+
+export type RexInboundEmailRow = {
+  id: string;
+  received_at: string;
+  from_name: string | null;
+  from_address: string;
+  to_addresses: string[];
+  subject: string;
+  body_text: string | null;
+  body_html: string | null;
+  snippet: string | null;
+  external_message_id: string;
+  thread_participant_count: number | null;
+};
+
+export type RexEmailExtractionRow = {
+  email_id: string;
+  kind: (typeof EXTRACTION_KINDS)[number];
+  status: "pending";
+  title: string;
+  summary: string | null;
+  detail: string | null;
+  payload: Record<string, unknown>;
+};
+
+export type RexInboundEmailAttachmentRow = {
+  email_id: string;
+  filename: string;
+  content_type: string | null;
+  size_bytes: number | null;
+};
+
+function extractionForKind(
+  kind: (typeof EXTRACTION_KINDS)[number],
+): Pick<RexEmailExtractionRow, "title" | "summary" | "payload"> {
+  const org = faker.company.name();
+  const person = faker.person.fullName();
+  switch (kind) {
+    case "contact":
+      return {
+        title: person,
+        summary: `${org} · ${pickOne(ROLES)} · ${faker.location.country()}`,
+        payload: {
+          name: person,
+          organisationName: org,
+          role: pickOne(ROLES),
+          geography: faker.location.country(),
+          notes: faker.lorem.sentence(),
+        },
+      };
+    case "organisation":
+      return {
+        title: org,
+        summary: `${pickOne(ORG_TYPES)} · ${faker.location.country()}`,
+        payload: {
+          name: org,
+          type: pickOne(ORG_TYPES),
+          geography: faker.location.country(),
+          notes: faker.lorem.sentence(),
+        },
+      };
+    case "deal_signal":
+      return {
+        title: `${faker.company.buzzNoun()} — ${pickOne(DEAL_STRUCTURES)}`,
+        summary: `${faker.finance.amount({ min: 5, max: 120, dec: 0 })}M · ${pickOne(SECTORS)} · ${pickOne(DEAL_STATUSES)}`,
+        payload: {
+          title: `${faker.company.name()} — growth round`,
+          size: faker.number.int({ min: 5, max: 150 }) * 1_000_000,
+          structure: pickOne(DEAL_STRUCTURES),
+          sector: pickOne(SECTORS),
+          status: pickOne(DEAL_STATUSES),
+          notes: faker.lorem.sentence(),
+        },
+      };
+    case "intro_request":
+      return {
+        title: `Intro — ${person} / ${org}`,
+        summary: `Warm intro context for ${faker.company.buzzPhrase()}`,
+        payload: {
+          requesterName: faker.person.fullName(),
+          targetName: person,
+          targetOrganisation: org,
+          reason: faker.lorem.sentence(),
+        },
+      };
+    default:
+      return { title: "", summary: null, payload: {} };
+  }
+}
+
+export type RexInboundEmailDataset = {
+  emails: RexInboundEmailRow[];
+  extractions: RexEmailExtractionRow[];
+  attachments: RexInboundEmailAttachmentRow[];
+};
+
+/** Faker-driven inbox rows plus optional pending extractions and attachment metadata. */
+export function createInboundEmailDataset(num: number): RexInboundEmailDataset {
+  const emails: RexInboundEmailRow[] = [];
+  const extractions: RexEmailExtractionRow[] = [];
+  const attachments: RexInboundEmailAttachmentRow[] = [];
+
+  const inbox = faker.helpers.arrayElement([
+    "rex@workspace.local",
+    "rex@robson.capital",
+    "inbox@robson.capital",
+  ]);
+
+  for (let i = 0; i < num; i++) {
+    const id = randomUUID();
+    const fromName = faker.person.fullName();
+    const fromAddress = faker.internet.email({ firstName: fromName.split(" ")[0] });
+    const subject = faker.lorem.sentence({ min: 4, max: 10 }).replace(/\.$/, "");
+    const opening = faker.lorem.sentence({ min: 6, max: 14 });
+    const body = [
+      `Hi Rex,`,
+      "",
+      opening,
+      "",
+      faker.lorem.paragraphs({ min: 1, max: 2 }, "\n\n"),
+      "",
+      `— ${fromName.split(" ")[0]}`,
+    ].join("\n");
+    const snippet =
+      opening.length > 160 ? `${opening.slice(0, 157)}…` : opening;
+
+    emails.push({
+      id,
+      received_at: faker.date.recent({ days: 21 }).toISOString(),
+      from_name: fromName,
+      from_address: fromAddress,
+      to_addresses: [inbox],
+      subject,
+      body_text: body,
+      body_html: null,
+      snippet,
+      external_message_id: `faker_${randomUUID()}`,
+      thread_participant_count: faker.datatype.boolean({ probability: 0.35 })
+        ? faker.number.int({ min: 2, max: 12 })
+        : null,
+    });
+
+    if (faker.datatype.boolean({ probability: 0.45 })) {
+      const kind = pickOne(EXTRACTION_KINDS);
+      const part = extractionForKind(kind);
+      extractions.push({
+        email_id: id,
+        kind,
+        status: "pending",
+        title: part.title,
+        summary: part.summary,
+        detail: null,
+        payload: part.payload,
+      });
+    }
+
+    if (faker.datatype.boolean({ probability: 0.28 })) {
+      const ext = faker.helpers.arrayElement(["pdf", "docx", "xlsx", "png"]);
+      const name =
+        ext === "pdf"
+          ? `${faker.word.words(2).replace(/\s+/g, "_")}.pdf`
+          : `${faker.system.fileName({ extensionCount: 1 })}.${ext}`;
+      const contentType =
+        ext === "pdf"
+          ? "application/pdf"
+          : ext === "png"
+            ? "image/png"
+            : ext === "xlsx"
+              ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      attachments.push({
+        email_id: id,
+        filename: name,
+        content_type: contentType,
+        size_bytes: faker.number.int({ min: 12_000, max: 2_500_000 }),
+      });
+    }
+  }
+
+  return { emails, extractions, attachments };
 }

@@ -6,6 +6,7 @@
  *   npm run db:seed
  *   npm run db:seed -- --orgs 5 --contacts 25 --deals 12
  *   npm run db:seed -- --append --contacts 5
+ *   npm run db:seed -- --emails 0
  *   npm run db:seed -- --seed 4242
  */
 
@@ -20,6 +21,7 @@ import {
   type DealRow,
   type OrganisationRow,
 } from "./factories";
+import { seedInboundEmails } from "./emailSeed";
 import { createServiceSupabase } from "./env";
 
 const DUMMY = "00000000-0000-0000-0000-000000000000";
@@ -62,18 +64,20 @@ function parsePositiveInt(raw: string | undefined, flag: string): number {
 }
 
 function printHelp(): void {
-  console.log(`db:seed — fill organisations, contacts, and deals with Faker data.
+  console.log(`db:seed — fill organisations, contacts, deals, and inbound emails with Faker data.
 
 Options:
   --orgs, -o       Number of organisations (default: 3)
   --contacts, -c   Number of contacts (default: 10)
   --deals, -d      Number of deals (default: 5)
+  --emails, -e     Number of rex_inbound_emails rows (default: 5; 0 skips email seeding)
   --append, -a     Skip clearing tables before insert
   --seed           Faker seed for reproducible runs (number)
   --help, -h       Show this message
 
 Examples:
   npm run db:seed -- --orgs 8 --contacts 40 --deals 15
+  npm run db:seed -- --emails 0
   npm run db:seed -- --seed 12345
 `);
 }
@@ -82,6 +86,7 @@ export type SeedOptions = {
   orgCount: number;
   contactCount: number;
   dealCount: number;
+  emailCount: number;
   append: boolean;
   fakerSeed?: number;
 };
@@ -93,8 +98,12 @@ export async function seedDatabase(
   organisations: OrganisationRow[];
   contacts: ContactRow[];
   deals: DealRow[];
+  emailRows: number;
+  extractionRows: number;
+  attachmentRows: number;
 }> {
-  const { orgCount, contactCount, dealCount, append, fakerSeed } = options;
+  const { orgCount, contactCount, dealCount, emailCount, append, fakerSeed } =
+    options;
 
   if (contactCount > 0 && orgCount === 0) {
     throw new Error("--contacts requires at least one organisation (--orgs >= 1).");
@@ -123,7 +132,19 @@ export async function seedDatabase(
     await insertChunked(supabase, "deals", deals);
   }
 
-  return { organisations, contacts, deals };
+  const { emails, extractions, attachments } = await seedInboundEmails(supabase, {
+    count: emailCount,
+    append,
+  });
+
+  return {
+    organisations,
+    contacts,
+    deals,
+    emailRows: emails.length,
+    extractionRows: extractions.length,
+    attachmentRows: attachments.length,
+  };
 }
 
 async function main(): Promise<void> {
@@ -133,6 +154,7 @@ async function main(): Promise<void> {
       orgs: { type: "string", short: "o", default: "3" },
       contacts: { type: "string", short: "c", default: "10" },
       deals: { type: "string", short: "d", default: "5" },
+      emails: { type: "string", short: "e", default: "5" },
       append: { type: "boolean", short: "a", default: false },
       seed: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
@@ -149,21 +171,35 @@ async function main(): Promise<void> {
   const orgCount = parsePositiveInt(values.orgs, "--orgs");
   const contactCount = parsePositiveInt(values.contacts, "--contacts");
   const dealCount = parsePositiveInt(values.deals, "--deals");
+  const emailCount = parsePositiveInt(values.emails, "--emails");
   const fakerSeed =
     values.seed !== undefined ? parsePositiveInt(values.seed, "--seed") : undefined;
 
   const supabase = createServiceSupabase();
 
-  const { organisations, contacts, deals } = await seedDatabase(supabase, {
+  const {
+    organisations,
+    contacts,
+    deals,
+    emailRows,
+    extractionRows,
+    attachmentRows,
+  } = await seedDatabase(supabase, {
     orgCount,
     contactCount,
     dealCount,
+    emailCount,
     append: values.append,
     fakerSeed,
   });
 
+  const emailLine =
+    emailCount > 0
+      ? ` ${emailRows} inbound emails (${extractionRows} extractions, ${attachmentRows} attachments).`
+      : "";
+
   console.log(
-    `Seeded ${organisations.length} organisations, ${contacts.length} contacts, ${deals.length} deals.` +
+    `Seeded ${organisations.length} organisations, ${contacts.length} contacts, ${deals.length} deals.${emailLine}` +
       (values.append ? " (append mode)" : ""),
   );
 }

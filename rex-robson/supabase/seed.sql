@@ -1,5 +1,6 @@
 -- Static sample data for SQL Editor / supabase db reset.
 -- For repeatable, count-driven fake data use: npm run db:seed -- --help
+-- Inbound email–only Faker seed: npm run db:seed:emails -- --help
 -- Order: contacts reference organisations; deals are standalone; extractions/attachments reference emails.
 truncate table public.rex_email_extractions restart identity;
 truncate table public.rex_inbound_email_attachments restart identity;
