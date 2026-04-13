@@ -1,11 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type {
-  WorkspaceDealRow,
-  WorkspaceOrganisationRow,
-  WorkspaceSuggestionRow,
-} from "@/lib/data/workspace-lists";
+import type { WorkspaceSuggestionRow } from "@/lib/data/workspace-lists";
 
 function PanelChrome({
   title,
@@ -39,47 +35,6 @@ function muted(line: string | null | undefined) {
     <p className="mt-0.5 line-clamp-2 text-xs text-charcoal-light/85">
       {line}
     </p>
-  );
-}
-
-export function OrganisationsDataPanel({
-  rows,
-}: {
-  rows: WorkspaceOrganisationRow[];
-}) {
-  return (
-    <PanelChrome title="Organisations" count={rows.length}>
-      {rows.map((o) => (
-        <li key={o.id} className="px-4 py-3">
-          <p className="text-sm font-medium text-charcoal">{o.name}</p>
-          {muted(o.type)}
-          {muted(o.description)}
-        </li>
-      ))}
-    </PanelChrome>
-  );
-}
-
-export function DealsDataPanel({ rows }: { rows: WorkspaceDealRow[] }) {
-  return (
-    <PanelChrome title="Deal canvas" count={rows.length}>
-      {rows.map((d) => {
-        const meta = [d.sector, d.structure, d.status]
-          .filter(Boolean)
-          .join(" · ");
-        return (
-          <li key={d.id} className="px-4 py-3">
-            <p className="text-sm font-medium text-charcoal">{d.title}</p>
-            {d.size != null ? (
-              <p className="mt-0.5 text-xs text-charcoal-light/85">
-                Size {d.size.toLocaleString()}
-              </p>
-            ) : null}
-            {muted(meta || null)}
-          </li>
-        );
-      })}
-    </PanelChrome>
   );
 }
 

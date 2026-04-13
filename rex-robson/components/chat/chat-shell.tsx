@@ -14,11 +14,9 @@ import { ChatComposer } from "./chat-composer";
 import { ChatMessageList, type ChatMessage } from "./chat-message-list";
 import { ChatSidebar, type ChatNavId, type WorkspaceDisplayMode } from "./chat-sidebar";
 import { ContactsBrowsePanel } from "./contacts-browse-panel";
-import {
-  DealsDataPanel,
-  OrganisationsDataPanel,
-  SuggestionsDataPanel,
-} from "./workspace-data-panels";
+import { DealsBrowsePanel } from "./deals-browse-panel";
+import { OrganisationsBrowsePanel } from "./organisations-browse-panel";
+import { SuggestionsDataPanel } from "./workspace-data-panels";
 
 const WORKSPACE_DISPLAY_KEY = "rex-workspace-display";
 
@@ -219,13 +217,13 @@ export function ChatShell({
                 message={rexEmptyOrganisations}
               />
             ) : (
-              <OrganisationsDataPanel rows={effectiveWorkspace.organisations} />
+              <OrganisationsBrowsePanel />
             )
           ) : activeNav === "deal-canvas" ? (
             effectiveStats.openDealCount === 0 ? (
               <RexVoicePanel title="Deal Canvas" message={rexEmptyDealCanvas} />
             ) : (
-              <DealsDataPanel rows={effectiveWorkspace.deals} />
+              <DealsBrowsePanel />
             )
           ) : activeNav === "suggestions" ? (
             effectiveStats.suggestionsPendingCount === 0 ? (

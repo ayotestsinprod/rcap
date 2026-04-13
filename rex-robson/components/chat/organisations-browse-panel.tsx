@@ -2,29 +2,29 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT,
-  type WorkspaceContactPageRow,
-} from "@/lib/data/workspace-contacts.types";
+  WORKSPACE_ORGANISATIONS_PAGE_SIZE_DEFAULT,
+  type WorkspaceOrganisationPageRow,
+} from "@/lib/data/workspace-organisations-page.types";
 import { WorkspaceBrowsePagination } from "./workspace-browse-pagination";
 
 function muted(line: string | null | undefined) {
   if (line == null || line === "") return null;
   return (
-    <p className="mt-0.5 line-clamp-2 text-xs text-charcoal-light/85">
+    <p className="mt-0.5 line-clamp-3 text-xs text-charcoal-light/85">
       {line}
     </p>
   );
 }
 
-type ApiOk = { rows: WorkspaceContactPageRow[]; total: number };
+type ApiOk = { rows: WorkspaceOrganisationPageRow[]; total: number };
 type ApiErr = { error?: string; hint?: string };
 
-export function ContactsBrowsePanel() {
-  const pageSize = WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT;
+export function OrganisationsBrowsePanel() {
+  const pageSize = WORKSPACE_ORGANISATIONS_PAGE_SIZE_DEFAULT;
   const [queryInput, setQueryInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [rows, setRows] = useState<WorkspaceContactPageRow[]>([]);
+  const [rows, setRows] = useState<WorkspaceOrganisationPageRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export function ContactsBrowsePanel() {
       params.set("q", debouncedQuery);
     }
     try {
-      const res = await fetch(`/api/workspace/contacts?${params.toString()}`);
+      const res = await fetch(`/api/workspace/organisations?${params.toString()}`);
       const data = (await res.json()) as ApiOk & ApiErr;
       if (!res.ok) {
         setRows([]);
@@ -57,7 +57,7 @@ export function ContactsBrowsePanel() {
         const parts = [data.error, data.hint].filter(
           (x): x is string => typeof x === "string" && x.length > 0,
         );
-        setError(parts.length > 0 ? parts.join(" ") : "Could not load contacts.");
+        setError(parts.length > 0 ? parts.join(" ") : "Could not load organisations.");
         return;
       }
       setRows(data.rows ?? []);
@@ -65,7 +65,7 @@ export function ContactsBrowsePanel() {
     } catch {
       setRows([]);
       setTotal(0);
-      setError("Network error while loading contacts.");
+      setError("Network error while loading organisations.");
     } finally {
       setLoading(false);
     }
@@ -90,7 +90,7 @@ export function ContactsBrowsePanel() {
     <div className="flex flex-col px-4 py-6 sm:px-8">
       <div className="shrink-0">
         <h2 className="font-serif text-xl tracking-tight text-charcoal">
-          Contacts
+          Organisations
         </h2>
         <p className="mt-1 text-xs text-charcoal-light/80">
           {loading
@@ -98,16 +98,16 @@ export function ContactsBrowsePanel() {
             : total === 0
               ? debouncedQuery
                 ? "No matches for that search."
-                : "No contacts yet."
+                : "No organisations yet."
               : `Showing ${from}–${to} of ${total}`}
         </p>
         <label className="mt-4 block">
-          <span className="sr-only">Search contacts</span>
+          <span className="sr-only">Search organisations</span>
           <input
             type="search"
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
-            placeholder="Search by name, company, role, notes…"
+            placeholder="Deep search: name, type, description…"
             autoComplete="off"
             className="w-full rounded-lg border border-charcoal/15 bg-cream px-3 py-2 text-sm text-charcoal placeholder:text-charcoal-light/50 outline-none ring-charcoal/20 focus:border-charcoal/25 focus:ring-2"
           />
@@ -124,27 +124,24 @@ export function ContactsBrowsePanel() {
         <ul className="divide-y divide-charcoal/[0.06]">
           {loading
             ? Array.from({ length: pageSize }).map((_, i) => (
-                <li key={i} className="animate-pulse px-4 py-3">
-                  <div className="h-4 w-40 rounded bg-charcoal/10" />
-                  <div className="mt-2 h-3 w-64 rounded bg-charcoal/5" />
+                <li key={i} className="animate-pulse px-4 py-4">
+                  <div className="h-4 w-48 rounded bg-charcoal/10" />
+                  <div className="mt-2 h-3 w-32 rounded bg-charcoal/5" />
+                  <div className="mt-2 h-10 w-full rounded bg-charcoal/[0.04]" />
                 </li>
               ))
-            : rows.map((c) => {
-                const sub = [c.role, c.organisation_name, c.geography]
-                  .filter(Boolean)
-                  .join(" · ");
-                return (
-                  <li key={c.id} className="px-4 py-3">
-                    <p className="text-sm font-medium text-charcoal">{c.name}</p>
-                    {muted(sub || null)}
-                  </li>
-                );
-              })}
+            : rows.map((o) => (
+                <li key={o.id} className="px-4 py-4">
+                  <p className="text-sm font-medium text-charcoal">{o.name}</p>
+                  {muted(o.type)}
+                  {muted(o.description)}
+                </li>
+              ))}
         </ul>
       </div>
 
       <WorkspaceBrowsePagination
-        ariaLabel="Contacts pagination"
+        ariaLabel="Organisations pagination"
         safePage={safePage}
         totalPages={totalPages}
         loading={loading}

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { sanitizeWorkspaceListSearch } from "@/lib/data/workspace-search-sanitize";
 import {
-  getWorkspaceContactsPage,
-  WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT,
-  WORKSPACE_CONTACTS_PAGE_SIZE_MAX,
-} from "@/lib/data/workspace-contacts-page";
+  getWorkspaceDealsPage,
+  WORKSPACE_DEALS_PAGE_SIZE_DEFAULT,
+  WORKSPACE_DEALS_PAGE_SIZE_MAX,
+} from "@/lib/data/workspace-deals-page";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const page = pageRaw ? Number.parseInt(pageRaw, 10) : 1;
   const pageSize = sizeRaw
     ? Number.parseInt(sizeRaw, 10)
-    : WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT;
+    : WORKSPACE_DEALS_PAGE_SIZE_DEFAULT;
 
   if (!Number.isFinite(page) || page < 1) {
     return NextResponse.json({ error: "Invalid page" }, { status: 400 });
@@ -23,10 +23,10 @@ export async function GET(req: Request) {
   if (
     !Number.isFinite(pageSize) ||
     pageSize < 1 ||
-    pageSize > WORKSPACE_CONTACTS_PAGE_SIZE_MAX
+    pageSize > WORKSPACE_DEALS_PAGE_SIZE_MAX
   ) {
     return NextResponse.json(
-      { error: `pageSize must be 1–${WORKSPACE_CONTACTS_PAGE_SIZE_MAX}` },
+      { error: `pageSize must be 1–${WORKSPACE_DEALS_PAGE_SIZE_MAX}` },
       { status: 400 },
     );
   }
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   const search = sanitizeWorkspaceListSearch(qRaw);
 
   try {
-    const result = await getWorkspaceContactsPage({
+    const result = await getWorkspaceDealsPage({
       search,
       page,
       pageSize,
@@ -43,13 +43,13 @@ export async function GET(req: Request) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Query failed";
     if (process.env.NODE_ENV === "development") {
-      console.error("[rex-robson] /api/workspace/contacts:", e);
+      console.error("[rex-robson] /api/workspace/deals:", e);
     }
     return NextResponse.json(
       {
         error: message,
         hint:
-          "If this mentions workspace_contacts_page, apply the latest Supabase migration (20260413150000_workspace_contacts_page.sql).",
+          "If this mentions workspace_deals_page, apply the latest Supabase migration (20260413160000_workspace_orgs_deals_page.sql).",
       },
       { status: 503 },
     );

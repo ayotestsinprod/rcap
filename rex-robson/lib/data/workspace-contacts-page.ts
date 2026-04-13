@@ -15,17 +15,6 @@ export {
   WORKSPACE_CONTACTS_PAGE_SIZE_MAX,
 } from "@/lib/data/workspace-contacts.types";
 
-/** Strip ILIKE wildcards and cap length so user input cannot broaden the pattern. */
-export function sanitizeContactsSearch(raw: string | null | undefined): string | null {
-  const t = (raw ?? "")
-    .trim()
-    .replace(/%/g, "")
-    .replace(/_/g, "")
-    .replace(/\s+/g, " ")
-    .slice(0, 200);
-  return t === "" ? null : t;
-}
-
 function parseRpcPayload(data: unknown): WorkspaceContactsPageResult {
   if (data == null || typeof data !== "object") {
     return { rows: [], total: 0 };
