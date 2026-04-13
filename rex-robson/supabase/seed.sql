@@ -1,4 +1,5 @@
--- Sample data for local reset or SQL Editor paste.
+-- Static sample data for SQL Editor / supabase db reset.
+-- For repeatable, count-driven fake data use: npm run db:seed -- --help
 -- Order: contacts reference organisations; deals are standalone.
 truncate table public.contacts restart identity;
 truncate table public.deals restart identity;
