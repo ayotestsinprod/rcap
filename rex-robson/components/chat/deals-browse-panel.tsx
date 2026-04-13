@@ -74,6 +74,7 @@ export function DealsBrowsePanel() {
   const [stageHistory, setStageHistory] = useState<StageHistoryRow[]>([]);
   const [draggingDealId, setDraggingDealId] = useState<string | null>(null);
   const [dropStage, setDropStage] = useState<DealStage | null>(null);
+  const [dropPulseStage, setDropPulseStage] = useState<DealStage | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(queryInput.trim()), 320);
@@ -266,6 +267,12 @@ export function DealsBrowsePanel() {
   const moveStage = async (dealId: string, toStage: DealStage) => {
     const source = rows.find((r) => r.id === dealId);
     if (source?.deal_stage === toStage) return;
+    const previousRows = rows;
+    setRows((prev) =>
+      prev.map((row) =>
+        row.id === dealId ? { ...row, deal_stage: toStage } : row,
+      ),
+    );
     setStageMoveBusyId(dealId);
     setError(null);
     try {
@@ -276,14 +283,20 @@ export function DealsBrowsePanel() {
       });
       const data = (await res.json()) as ApiErr;
       if (!res.ok) {
+        setRows(previousRows);
         setError(data.error ?? "Could not move deal stage.");
         return;
       }
-      setReloadTick((n) => n + 1);
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === dealId ? { ...row, deal_stage: toStage } : row,
+        ),
+      );
       if (editingId === dealId && formOpen) {
         void openEdit({ id: dealId, title: "", size: null, deal_type: null, deal_stage: toStage, sector: null, structure: null, status: null });
       }
     } catch {
+      setRows(previousRows);
       setError("Network error while moving deal stage.");
     } finally {
       setStageMoveBusyId(null);
@@ -294,6 +307,22 @@ export function DealsBrowsePanel() {
     e: DragEvent<HTMLDivElement>,
     dealId: string,
   ) => {
+    const dragPreview = e.currentTarget.cloneNode(true) as HTMLDivElement;
+    dragPreview.style.position = "absolute";
+    dragPreview.style.left = "-9999px";
+    dragPreview.style.top = "-9999px";
+    dragPreview.style.width = `${e.currentTarget.getBoundingClientRect().width}px`;
+    dragPreview.style.opacity = "1";
+    dragPreview.style.background = "#f8f6ef";
+    dragPreview.style.border = "1px solid rgba(31,31,31,0.25)";
+    dragPreview.style.boxShadow = "0 12px 26px rgba(0,0,0,0.16)";
+    dragPreview.style.transform = "rotate(1deg)";
+    document.body.appendChild(dragPreview);
+    e.dataTransfer.setDragImage(dragPreview, 20, 20);
+    window.setTimeout(() => {
+      dragPreview.remove();
+    }, 0);
+
     e.dataTransfer.setData("text/plain", dealId);
     e.dataTransfer.effectAllowed = "move";
     setDraggingDealId(dealId);
@@ -325,6 +354,8 @@ export function DealsBrowsePanel() {
     if (!dealId || stageMoveBusyId) return;
     const source = rows.find((r) => r.id === dealId);
     if (!source || source.deal_stage === stage) return;
+    setDropPulseStage(stage);
+    window.setTimeout(() => setDropPulseStage((s) => (s === stage ? null : s)), 180);
     await moveStage(dealId, stage);
   };
 
@@ -384,10 +415,12 @@ export function DealsBrowsePanel() {
                 onDragOver={(e) => onColumnDragOver(e, stage.id)}
                 onDragLeave={(e) => onColumnDragLeave(e, stage.id)}
                 onDrop={(e) => void onColumnDrop(e, stage.id)}
-                className={`rounded-lg border bg-cream p-2 transition-colors ${
+                className={`rounded-lg border bg-cream p-2 transition-all duration-150 ${
                   dropStage === stage.id
-                    ? "border-charcoal/30 bg-charcoal/[0.04]"
-                    : "border-charcoal/8"
+                    ? "scale-[1.015] border-charcoal/30 bg-charcoal/[0.05] shadow-md"
+                    : dropPulseStage === stage.id
+                      ? "scale-[1.01] border-charcoal/25 bg-charcoal/[0.04] shadow-sm"
+                      : "border-charcoal/8"
                 }`}
               >
                 <div className="mb-2 flex items-center justify-between border-b border-charcoal/8 px-1 pb-2">
@@ -416,14 +449,16 @@ export function DealsBrowsePanel() {
                           draggable={stageMoveBusyId !== d.id}
                           onDragStart={(e) => onCardDragStart(e, d.id)}
                           onDragEnd={onCardDragEnd}
-                          className={`rounded-md border bg-cream-light/30 p-3 ${
-                            draggingDealId === d.id ? "border-charcoal/30 opacity-60" : "border-charcoal/10"
+                          className={`rounded-md border bg-cream-light/30 p-3 transition-[transform,box-shadow,opacity] duration-150 will-change-transform ${
+                            draggingDealId === d.id
+                              ? "z-10 scale-[1.02] border-charcoal/30 opacity-100 shadow-lg"
+                              : "border-charcoal/10 shadow-[0_1px_0_rgba(0,0,0,0.02)] hover:-translate-y-[1px] hover:shadow-md"
                           }`}
                         >
                           <button
                             type="button"
                             onClick={() => void openEdit(d)}
-                            className="w-full text-left"
+                            className="w-full cursor-grab text-left active:cursor-grabbing"
                             aria-label={`Edit ${d.title}`}
                           >
                             <p className="text-sm font-medium text-charcoal">{d.title}</p>
