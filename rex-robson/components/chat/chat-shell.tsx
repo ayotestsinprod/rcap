@@ -3,13 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { WorkspaceLists } from "@/lib/data/workspace-lists";
 import type { RexDashboardStats } from "@/lib/rex/voice";
-import {
-  rexEmptyContacts,
-  rexEmptyDealCanvas,
-  rexEmptyOrganisations,
-  rexEmptySuggestions,
-  rexEmptyUpload,
-} from "@/lib/rex/voice";
+import { rexEmptySuggestions, rexEmptyUpload } from "@/lib/rex/voice";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessageList, type ChatMessage } from "./chat-message-list";
 import { ChatSidebar, type ChatNavId, type WorkspaceDisplayMode } from "./chat-sidebar";
@@ -205,26 +199,11 @@ export function ChatShell({
               </div>
             </div>
           ) : activeNav === "contacts" ? (
-            effectiveStats.contactCount === 0 ? (
-              <RexVoicePanel title="Contacts" message={rexEmptyContacts} />
-            ) : (
-              <ContactsBrowsePanel />
-            )
+            <ContactsBrowsePanel />
           ) : activeNav === "organisations" ? (
-            effectiveStats.organisationCount === 0 ? (
-              <RexVoicePanel
-                title="Organisations"
-                message={rexEmptyOrganisations}
-              />
-            ) : (
-              <OrganisationsBrowsePanel />
-            )
+            <OrganisationsBrowsePanel />
           ) : activeNav === "deal-canvas" ? (
-            effectiveStats.openDealCount === 0 ? (
-              <RexVoicePanel title="Deal Canvas" message={rexEmptyDealCanvas} />
-            ) : (
-              <DealsBrowsePanel />
-            )
+            <DealsBrowsePanel />
           ) : activeNav === "suggestions" ? (
             effectiveStats.suggestionsPendingCount === 0 ? (
               <RexVoicePanel title="Suggestions" message={rexEmptySuggestions} />

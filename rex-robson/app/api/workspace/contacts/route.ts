@@ -1,10 +1,53 @@
 import { NextResponse } from "next/server";
+import { parseContactUpsertBody } from "@/lib/api/workspace-entity-bodies";
+import { readJsonObject } from "@/lib/api/workspace-post-parse";
 import { sanitizeWorkspaceListSearch } from "@/lib/data/workspace-search-sanitize";
 import {
   getWorkspaceContactsPage,
   WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT,
   WORKSPACE_CONTACTS_PAGE_SIZE_MAX,
 } from "@/lib/data/workspace-contacts-page";
+import {
+  getWorkspaceWriteClient,
+  insertWorkspaceContact,
+} from "@/lib/data/workspace-mutations";
+
+export async function POST(req: Request) {
+  const parsed = await readJsonObject(req);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+  const body = parsed.body;
+  const fields = parseContactUpsertBody(body);
+  if (!fields.ok) {
+    return NextResponse.json({ error: fields.error }, { status: 400 });
+  }
+
+  try {
+    const client = await getWorkspaceWriteClient();
+    const row = await insertWorkspaceContact(client, {
+      name: fields.value.name,
+      organisation_id: fields.value.organisationId,
+      role: fields.value.role,
+      geography: fields.value.geography,
+      notes: fields.value.notes,
+    });
+    return NextResponse.json(row, { status: 201 });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Insert failed";
+    if (process.env.NODE_ENV === "development") {
+      console.error("[rex-robson] POST /api/workspace/contacts:", e);
+    }
+    return NextResponse.json(
+      {
+        error: message,
+        hint:
+          "If organisationId is set, it must exist. For local dev, set SUPABASE_SERVICE_ROLE_KEY or sign in.",
+      },
+      { status: 503 },
+    );
+  }
+}
 
 export async function GET(req: Request) {
   const url = new URL(req.url);

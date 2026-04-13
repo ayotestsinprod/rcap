@@ -1,11 +1,21 @@
 "use client";
 
+import { Plus } from "lucide-react";
+import type { FormEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import {
   WORKSPACE_ORGANISATIONS_PAGE_SIZE_DEFAULT,
   type WorkspaceOrganisationPageRow,
 } from "@/lib/data/workspace-organisations-page.types";
 import { WorkspaceBrowsePagination } from "./workspace-browse-pagination";
+import {
+  WORKSPACE_FORM_BTN_PRIMARY,
+  WORKSPACE_FORM_BTN_SECONDARY,
+  WORKSPACE_FORM_INPUT_CLASS,
+  WORKSPACE_FORM_LABEL_CLASS,
+  WORKSPACE_BROWSE_ROW_BUTTON_CLASS,
+  WorkspaceCreateDialog,
+} from "./workspace-create-dialog";
 
 function muted(line: string | null | undefined) {
   if (line == null || line === "") return null;
@@ -28,6 +38,15 @@ export function OrganisationsBrowsePanel() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formBusy, setFormBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState("");
+  const [newDescription, setNewDescription] = useState("");
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(queryInput.trim()), 320);
@@ -73,7 +92,7 @@ export function OrganisationsBrowsePanel() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, reloadTick]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -86,21 +105,99 @@ export function OrganisationsBrowsePanel() {
     }
   }, [page, safePage]);
 
+  const openCreate = () => {
+    setFormMode("create");
+    setEditingId(null);
+    setNewName("");
+    setNewType("");
+    setNewDescription("");
+    setFormError(null);
+    setFormOpen(true);
+  };
+
+  const openEdit = (o: WorkspaceOrganisationPageRow) => {
+    setFormMode("edit");
+    setEditingId(o.id);
+    setNewName(o.name);
+    setNewType(o.type ?? "");
+    setNewDescription(o.description ?? "");
+    setFormError(null);
+    setFormOpen(true);
+  };
+
+  const closeForm = () => {
+    if (formBusy) return;
+    setFormOpen(false);
+    setEditingId(null);
+  };
+
+  const onSubmitOrganisation = async (e: FormEvent) => {
+    e.preventDefault();
+    setFormBusy(true);
+    setFormError(null);
+    const payload = {
+      name: newName,
+      type: newType.trim() === "" ? null : newType.trim(),
+      description: newDescription.trim() === "" ? null : newDescription.trim(),
+    };
+    try {
+      const isEdit = formMode === "edit" && editingId != null;
+      const res = await fetch(
+        isEdit
+          ? `/api/workspace/organisations/${editingId}`
+          : "/api/workspace/organisations",
+        {
+          method: isEdit ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      const data = (await res.json()) as { error?: string; hint?: string };
+      if (!res.ok) {
+        const parts = [data.error, data.hint].filter(
+          (x): x is string => typeof x === "string" && x.length > 0,
+        );
+        setFormError(parts.length > 0 ? parts.join(" ") : "Could not save.");
+        return;
+      }
+      setFormOpen(false);
+      setEditingId(null);
+      if (formMode === "create") setPage(1);
+      setReloadTick((n) => n + 1);
+    } catch {
+      setFormError("Network error while saving.");
+    } finally {
+      setFormBusy(false);
+    }
+  };
+
   return (
     <div className="flex flex-col px-4 py-6 sm:px-8">
       <div className="shrink-0">
-        <h2 className="font-serif text-xl tracking-tight text-charcoal">
-          Organisations
-        </h2>
-        <p className="mt-1 text-xs text-charcoal-light/80">
-          {loading
-            ? "Loading…"
-            : total === 0
-              ? debouncedQuery
-                ? "No matches for that search."
-                : "No organisations yet."
-              : `Showing ${from}–${to} of ${total}`}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-serif text-xl tracking-tight text-charcoal">
+              Organisations
+            </h2>
+            <p className="mt-1 text-xs text-charcoal-light/80">
+              {loading
+                ? "Loading…"
+                : total === 0
+                  ? debouncedQuery
+                    ? "No matches for that search."
+                    : "No organisations yet."
+                  : `Showing ${from}–${to} of ${total}`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-charcoal px-3 py-2 text-xs font-medium text-cream transition-colors hover:bg-charcoal/90"
+          >
+            <Plus className="size-3.5" aria-hidden />
+            Add organisation
+          </button>
+        </div>
         <label className="mt-4 block">
           <span className="sr-only">Search organisations</span>
           <input
@@ -131,10 +228,19 @@ export function OrganisationsBrowsePanel() {
                 </li>
               ))
             : rows.map((o) => (
-                <li key={o.id} className="px-4 py-4">
-                  <p className="text-sm font-medium text-charcoal">{o.name}</p>
-                  {muted(o.type)}
-                  {muted(o.description)}
+                <li key={o.id}>
+                  <button
+                    type="button"
+                    onClick={() => openEdit(o)}
+                    className={WORKSPACE_BROWSE_ROW_BUTTON_CLASS}
+                    aria-label={`Edit ${o.name}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-charcoal">{o.name}</p>
+                      {muted(o.type)}
+                      {muted(o.description)}
+                    </div>
+                  </button>
                 </li>
               ))}
         </ul>
@@ -147,6 +253,80 @@ export function OrganisationsBrowsePanel() {
         loading={loading}
         onPageChange={setPage}
       />
+
+      <WorkspaceCreateDialog
+        open={formOpen}
+        title={formMode === "create" ? "New organisation" : "Edit organisation"}
+        onClose={closeForm}
+      >
+        <form onSubmit={onSubmitOrganisation} className="space-y-3 p-4">
+          <div>
+            <label htmlFor="org-new-name" className={WORKSPACE_FORM_LABEL_CLASS}>
+              Name
+            </label>
+            <input
+              id="org-new-name"
+              required
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className={WORKSPACE_FORM_INPUT_CLASS}
+              placeholder="Company or fund name"
+              autoComplete="organization"
+            />
+          </div>
+          <div>
+            <label htmlFor="org-new-type" className={WORKSPACE_FORM_LABEL_CLASS}>
+              Type
+            </label>
+            <input
+              id="org-new-type"
+              value={newType}
+              onChange={(e) => setNewType(e.target.value)}
+              className={WORKSPACE_FORM_INPUT_CLASS}
+              placeholder="e.g. LP, GP, advisor"
+            />
+          </div>
+          <div>
+            <label htmlFor="org-new-desc" className={WORKSPACE_FORM_LABEL_CLASS}>
+              Description
+            </label>
+            <textarea
+              id="org-new-desc"
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              rows={3}
+              className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y`}
+              placeholder="Optional context"
+            />
+          </div>
+          {formError ? (
+            <p className="text-sm text-red-700/90" role="alert">
+              {formError}
+            </p>
+          ) : null}
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={closeForm}
+              disabled={formBusy}
+              className={WORKSPACE_FORM_BTN_SECONDARY}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={formBusy}
+              className={WORKSPACE_FORM_BTN_PRIMARY}
+            >
+              {formBusy
+                ? "Saving…"
+                : formMode === "create"
+                  ? "Add organisation"
+                  : "Save changes"}
+            </button>
+          </div>
+        </form>
+      </WorkspaceCreateDialog>
     </div>
   );
 }

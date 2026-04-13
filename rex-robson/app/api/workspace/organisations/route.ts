@@ -1,10 +1,51 @@
 import { NextResponse } from "next/server";
+import { parseOrganisationUpsertBody } from "@/lib/api/workspace-entity-bodies";
+import { readJsonObject } from "@/lib/api/workspace-post-parse";
 import { sanitizeWorkspaceListSearch } from "@/lib/data/workspace-search-sanitize";
 import {
   getWorkspaceOrganisationsPage,
   WORKSPACE_ORGANISATIONS_PAGE_SIZE_DEFAULT,
   WORKSPACE_ORGANISATIONS_PAGE_SIZE_MAX,
 } from "@/lib/data/workspace-organisations-page";
+import {
+  getWorkspaceWriteClient,
+  insertWorkspaceOrganisation,
+} from "@/lib/data/workspace-mutations";
+
+export async function POST(req: Request) {
+  const parsed = await readJsonObject(req);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+  const body = parsed.body;
+  const fields = parseOrganisationUpsertBody(body);
+  if (!fields.ok) {
+    return NextResponse.json({ error: fields.error }, { status: 400 });
+  }
+
+  try {
+    const client = await getWorkspaceWriteClient();
+    const row = await insertWorkspaceOrganisation(client, {
+      name: fields.value.name,
+      type: fields.value.type,
+      description: fields.value.description,
+    });
+    return NextResponse.json(row, { status: 201 });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Insert failed";
+    if (process.env.NODE_ENV === "development") {
+      console.error("[rex-robson] POST /api/workspace/organisations:", e);
+    }
+    return NextResponse.json(
+      {
+        error: message,
+        hint:
+          "Ensure Supabase RLS allows inserts (authenticated) or set SUPABASE_SERVICE_ROLE_KEY for local dev.",
+      },
+      { status: 503 },
+    );
+  }
+}
 
 export async function GET(req: Request) {
   const url = new URL(req.url);

@@ -1,11 +1,25 @@
 "use client";
 
+import { Plus } from "lucide-react";
+import type { FormEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import {
   WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT,
   type WorkspaceContactPageRow,
 } from "@/lib/data/workspace-contacts.types";
+import {
+  WORKSPACE_ORGANISATIONS_PAGE_SIZE_MAX,
+  type WorkspaceOrganisationPageRow,
+} from "@/lib/data/workspace-organisations-page.types";
 import { WorkspaceBrowsePagination } from "./workspace-browse-pagination";
+import {
+  WORKSPACE_FORM_BTN_PRIMARY,
+  WORKSPACE_FORM_BTN_SECONDARY,
+  WORKSPACE_FORM_INPUT_CLASS,
+  WORKSPACE_FORM_LABEL_CLASS,
+  WORKSPACE_BROWSE_ROW_BUTTON_CLASS,
+  WorkspaceCreateDialog,
+} from "./workspace-create-dialog";
 
 function muted(line: string | null | undefined) {
   if (line == null || line === "") return null;
@@ -19,6 +33,9 @@ function muted(line: string | null | undefined) {
 type ApiOk = { rows: WorkspaceContactPageRow[]; total: number };
 type ApiErr = { error?: string; hint?: string };
 
+/** Select value: create org via inline fields, then link contact. */
+const CONTACT_FORM_NEW_ORG_VALUE = "__new__";
+
 export function ContactsBrowsePanel() {
   const pageSize = WORKSPACE_CONTACTS_PAGE_SIZE_DEFAULT;
   const [queryInput, setQueryInput] = useState("");
@@ -28,6 +45,23 @@ export function ContactsBrowsePanel() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [formBusy, setFormBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [orgOptions, setOrgOptions] = useState<WorkspaceOrganisationPageRow[]>([]);
+  const [orgsLoading, setOrgsLoading] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newOrganisationId, setNewOrganisationId] = useState("");
+  const [inlineNewOrgName, setInlineNewOrgName] = useState("");
+  const [inlineNewOrgType, setInlineNewOrgType] = useState("");
+  const [inlineNewOrgDescription, setInlineNewOrgDescription] = useState("");
+  const [newRole, setNewRole] = useState("");
+  const [newGeography, setNewGeography] = useState("");
+  const [newNotes, setNewNotes] = useState("");
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(queryInput.trim()), 320);
@@ -73,7 +107,33 @@ export function ContactsBrowsePanel() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, reloadTick]);
+
+  useEffect(() => {
+    if (!formOpen) return;
+    let cancelled = false;
+    (async () => {
+      setOrgsLoading(true);
+      try {
+        const res = await fetch(
+          `/api/workspace/organisations?page=1&pageSize=${WORKSPACE_ORGANISATIONS_PAGE_SIZE_MAX}`,
+        );
+        const data = (await res.json()) as {
+          rows?: WorkspaceOrganisationPageRow[];
+        };
+        if (!cancelled && res.ok) {
+          setOrgOptions(data.rows ?? []);
+        }
+      } catch {
+        if (!cancelled) setOrgOptions([]);
+      } finally {
+        if (!cancelled) setOrgsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [formOpen]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -86,21 +146,209 @@ export function ContactsBrowsePanel() {
     }
   }, [page, safePage]);
 
+  const openCreate = () => {
+    setFormMode("create");
+    setEditingId(null);
+    setDetailLoading(false);
+    setNewName("");
+    setNewOrganisationId("");
+    setInlineNewOrgName("");
+    setInlineNewOrgType("");
+    setInlineNewOrgDescription("");
+    setNewRole("");
+    setNewGeography("");
+    setNewNotes("");
+    setFormError(null);
+    setFormOpen(true);
+  };
+
+  const openEdit = async (c: WorkspaceContactPageRow) => {
+    setFormMode("edit");
+    setEditingId(c.id);
+    setFormError(null);
+    setFormOpen(true);
+    setDetailLoading(true);
+    setNewName("");
+    setNewOrganisationId("");
+    setInlineNewOrgName("");
+    setInlineNewOrgType("");
+    setInlineNewOrgDescription("");
+    setNewRole("");
+    setNewGeography("");
+    setNewNotes("");
+    try {
+      const res = await fetch(`/api/workspace/contacts/${c.id}`);
+      const data = (await res.json()) as {
+        error?: string;
+        name?: string;
+        organisationId?: string | null;
+        role?: string | null;
+        geography?: string | null;
+        notes?: string | null;
+      };
+      if (!res.ok) {
+        const msg =
+          typeof data.error === "string" && data.error.length > 0
+            ? data.error
+            : "Could not load contact.";
+        setFormError(msg);
+        return;
+      }
+      setNewName(data.name ?? "");
+      setNewOrganisationId(data.organisationId ?? "");
+      setNewRole(data.role ?? "");
+      setNewGeography(data.geography ?? "");
+      setNewNotes(data.notes ?? "");
+    } catch {
+      setFormError("Network error while loading contact.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeForm = () => {
+    if (formBusy) return;
+    setFormOpen(false);
+    setEditingId(null);
+    setDetailLoading(false);
+  };
+
+  const onSubmitContact = async (e: FormEvent) => {
+    e.preventDefault();
+    if (detailLoading) return;
+    setFormBusy(true);
+    setFormError(null);
+    let organisationId: string | null =
+      newOrganisationId.trim() === "" ? null : newOrganisationId.trim();
+
+    if (organisationId === CONTACT_FORM_NEW_ORG_VALUE) {
+      const orgName = inlineNewOrgName.trim();
+      if (orgName === "") {
+        setFormError("Enter a name for the new organisation.");
+        setFormBusy(false);
+        return;
+      }
+      try {
+        const orgRes = await fetch("/api/workspace/organisations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: orgName,
+            type: inlineNewOrgType.trim() === "" ? null : inlineNewOrgType.trim(),
+            description:
+              inlineNewOrgDescription.trim() === ""
+                ? null
+                : inlineNewOrgDescription.trim(),
+          }),
+        });
+        const orgData = (await orgRes.json()) as {
+          id?: string;
+          error?: string;
+          hint?: string;
+        };
+        if (!orgRes.ok) {
+          const parts = [orgData.error, orgData.hint].filter(
+            (x): x is string => typeof x === "string" && x.length > 0,
+          );
+          setFormError(
+            parts.length > 0 ? parts.join(" ") : "Could not create organisation.",
+          );
+          setFormBusy(false);
+          return;
+        }
+        const id = orgData.id;
+        if (typeof id !== "string" || id.length === 0) {
+          setFormError("Organisation was created but no id was returned.");
+          setFormBusy(false);
+          return;
+        }
+        organisationId = id;
+        setOrgOptions((prev) => {
+          if (prev.some((o) => o.id === id)) return prev;
+          return [
+            {
+              id,
+              name: orgName,
+              type:
+                inlineNewOrgType.trim() === "" ? null : inlineNewOrgType.trim(),
+              description:
+                inlineNewOrgDescription.trim() === ""
+                  ? null
+                  : inlineNewOrgDescription.trim(),
+            },
+            ...prev,
+          ];
+        });
+      } catch {
+        setFormError("Network error while creating organisation.");
+        setFormBusy(false);
+        return;
+      }
+    }
+
+    const payload = {
+      name: newName,
+      organisationId,
+      role: newRole.trim() === "" ? null : newRole.trim(),
+      geography: newGeography.trim() === "" ? null : newGeography.trim(),
+      notes: newNotes.trim() === "" ? null : newNotes.trim(),
+    };
+    try {
+      const isEdit = formMode === "edit" && editingId != null;
+      const res = await fetch(
+        isEdit ? `/api/workspace/contacts/${editingId}` : "/api/workspace/contacts",
+        {
+          method: isEdit ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      const data = (await res.json()) as { error?: string; hint?: string };
+      if (!res.ok) {
+        const parts = [data.error, data.hint].filter(
+          (x): x is string => typeof x === "string" && x.length > 0,
+        );
+        setFormError(parts.length > 0 ? parts.join(" ") : "Could not save.");
+        return;
+      }
+      setFormOpen(false);
+      setEditingId(null);
+      if (formMode === "create") setPage(1);
+      setReloadTick((n) => n + 1);
+    } catch {
+      setFormError("Network error while saving.");
+    } finally {
+      setFormBusy(false);
+    }
+  };
+
   return (
     <div className="flex flex-col px-4 py-6 sm:px-8">
       <div className="shrink-0">
-        <h2 className="font-serif text-xl tracking-tight text-charcoal">
-          Contacts
-        </h2>
-        <p className="mt-1 text-xs text-charcoal-light/80">
-          {loading
-            ? "Loading…"
-            : total === 0
-              ? debouncedQuery
-                ? "No matches for that search."
-                : "No contacts yet."
-              : `Showing ${from}–${to} of ${total}`}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-serif text-xl tracking-tight text-charcoal">
+              Contacts
+            </h2>
+            <p className="mt-1 text-xs text-charcoal-light/80">
+              {loading
+                ? "Loading…"
+                : total === 0
+                  ? debouncedQuery
+                    ? "No matches for that search."
+                    : "No contacts yet."
+                  : `Showing ${from}–${to} of ${total}`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-charcoal px-3 py-2 text-xs font-medium text-cream transition-colors hover:bg-charcoal/90"
+          >
+            <Plus className="size-3.5" aria-hidden />
+            Add contact
+          </button>
+        </div>
         <label className="mt-4 block">
           <span className="sr-only">Search contacts</span>
           <input
@@ -134,9 +382,18 @@ export function ContactsBrowsePanel() {
                   .filter(Boolean)
                   .join(" · ");
                 return (
-                  <li key={c.id} className="px-4 py-3">
-                    <p className="text-sm font-medium text-charcoal">{c.name}</p>
-                    {muted(sub || null)}
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => void openEdit(c)}
+                      className={`${WORKSPACE_BROWSE_ROW_BUTTON_CLASS} py-3`}
+                      aria-label={`Edit ${c.name}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-charcoal">{c.name}</p>
+                        {muted(sub || null)}
+                      </div>
+                    </button>
                   </li>
                 );
               })}
@@ -150,6 +407,214 @@ export function ContactsBrowsePanel() {
         loading={loading}
         onPageChange={setPage}
       />
+
+      <WorkspaceCreateDialog
+        open={formOpen}
+        title={formMode === "create" ? "New contact" : "Edit contact"}
+        onClose={closeForm}
+      >
+        <form
+          onSubmit={onSubmitContact}
+          className="space-y-3 p-4"
+          key={`${formMode}-${editingId ?? "new"}`}
+        >
+          {detailLoading ? (
+            <p className="py-6 text-center text-sm text-charcoal-light">
+              Loading contact…
+            </p>
+          ) : (
+            <>
+              <div>
+                <label
+                  htmlFor="contact-form-name"
+                  className={WORKSPACE_FORM_LABEL_CLASS}
+                >
+                  Name
+                </label>
+                <input
+                  id="contact-form-name"
+                  required
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className={WORKSPACE_FORM_INPUT_CLASS}
+                  placeholder="Full name"
+                  autoComplete="name"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="contact-form-org"
+                  className={WORKSPACE_FORM_LABEL_CLASS}
+                >
+                  Organisation
+                </label>
+                <select
+                  id="contact-form-org"
+                  value={newOrganisationId}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setNewOrganisationId(v);
+                    if (v !== CONTACT_FORM_NEW_ORG_VALUE) {
+                      setInlineNewOrgName("");
+                      setInlineNewOrgType("");
+                      setInlineNewOrgDescription("");
+                    }
+                  }}
+                  className={WORKSPACE_FORM_INPUT_CLASS}
+                >
+                  <option value="">
+                    {orgsLoading ? "Loading organisations…" : "No organisation"}
+                  </option>
+                  <option value={CONTACT_FORM_NEW_ORG_VALUE}>
+                    Create new organisation…
+                  </option>
+                  {orgOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+                {newOrganisationId === CONTACT_FORM_NEW_ORG_VALUE ? (
+                  <div className="mt-3 space-y-3 rounded-lg border border-charcoal/10 bg-cream-light/50 p-3">
+                    <p className="text-xs text-charcoal-light/90">
+                      This organisation is saved to your workspace and linked to
+                      this contact.
+                    </p>
+                    <div>
+                      <label
+                        htmlFor="contact-form-new-org-name"
+                        className={WORKSPACE_FORM_LABEL_CLASS}
+                      >
+                        New organisation name
+                      </label>
+                      <input
+                        id="contact-form-new-org-name"
+                        required
+                        value={inlineNewOrgName}
+                        onChange={(e) => setInlineNewOrgName(e.target.value)}
+                        className={WORKSPACE_FORM_INPUT_CLASS}
+                        placeholder="Company or fund name"
+                        autoComplete="organization"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="contact-form-new-org-type"
+                        className={WORKSPACE_FORM_LABEL_CLASS}
+                      >
+                        Type{" "}
+                        <span className="font-normal text-charcoal-light/70">
+                          (optional)
+                        </span>
+                      </label>
+                      <input
+                        id="contact-form-new-org-type"
+                        value={inlineNewOrgType}
+                        onChange={(e) => setInlineNewOrgType(e.target.value)}
+                        className={WORKSPACE_FORM_INPUT_CLASS}
+                        placeholder="e.g. LP, GP, advisor"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="contact-form-new-org-desc"
+                        className={WORKSPACE_FORM_LABEL_CLASS}
+                      >
+                        Description{" "}
+                        <span className="font-normal text-charcoal-light/70">
+                          (optional)
+                        </span>
+                      </label>
+                      <textarea
+                        id="contact-form-new-org-desc"
+                        value={inlineNewOrgDescription}
+                        onChange={(e) =>
+                          setInlineNewOrgDescription(e.target.value)
+                        }
+                        rows={2}
+                        className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y`}
+                        placeholder="Optional context"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <div>
+                <label
+                  htmlFor="contact-form-role"
+                  className={WORKSPACE_FORM_LABEL_CLASS}
+                >
+                  Role
+                </label>
+                <input
+                  id="contact-form-role"
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value)}
+                  className={WORKSPACE_FORM_INPUT_CLASS}
+                  placeholder="Title or function"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="contact-form-geo"
+                  className={WORKSPACE_FORM_LABEL_CLASS}
+                >
+                  Geography
+                </label>
+                <input
+                  id="contact-form-geo"
+                  value={newGeography}
+                  onChange={(e) => setNewGeography(e.target.value)}
+                  className={WORKSPACE_FORM_INPUT_CLASS}
+                  placeholder="Region or city"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="contact-form-notes"
+                  className={WORKSPACE_FORM_LABEL_CLASS}
+                >
+                  Notes
+                </label>
+                <textarea
+                  id="contact-form-notes"
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  rows={3}
+                  className={`${WORKSPACE_FORM_INPUT_CLASS} resize-y`}
+                  placeholder="Optional"
+                />
+              </div>
+            </>
+          )}
+          {formError ? (
+            <p className="text-sm text-red-700/90" role="alert">
+              {formError}
+            </p>
+          ) : null}
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={closeForm}
+              disabled={formBusy}
+              className={WORKSPACE_FORM_BTN_SECONDARY}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={formBusy || detailLoading}
+              className={WORKSPACE_FORM_BTN_PRIMARY}
+            >
+              {formBusy
+                ? "Saving…"
+                : formMode === "create"
+                  ? "Add contact"
+                  : "Save changes"}
+            </button>
+          </div>
+        </form>
+      </WorkspaceCreateDialog>
     </div>
   );
 }
