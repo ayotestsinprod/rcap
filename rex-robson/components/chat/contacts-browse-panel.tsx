@@ -40,6 +40,37 @@ function initials(name: string) {
   return parts.map((p) => p[0]?.toUpperCase() ?? "").join("");
 }
 
+const RECENCY_FULL_WEEKS = 24 * 0.2;
+const RECENCY_ZERO_WEEKS = 24;
+const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function recencyStrength(lastContactDate: string | null) {
+  if (!lastContactDate) return 0;
+  const ts = Date.parse(lastContactDate);
+  if (!Number.isFinite(ts)) return 0;
+  const elapsedWeeks = Math.max(0, (Date.now() - ts) / MS_PER_WEEK);
+  if (elapsedWeeks <= RECENCY_FULL_WEEKS) return 1;
+  if (elapsedWeeks >= RECENCY_ZERO_WEEKS) return 0;
+  return (
+    1 -
+    (elapsedWeeks - RECENCY_FULL_WEEKS) /
+      (RECENCY_ZERO_WEEKS - RECENCY_FULL_WEEKS)
+  );
+}
+
+function recencyLabel(lastContactDate: string | null) {
+  if (!lastContactDate) return "No contact";
+  const ts = Date.parse(lastContactDate);
+  if (!Number.isFinite(ts)) return "No contact";
+  const elapsedMs = Math.max(0, Date.now() - ts);
+  const elapsedDays = elapsedMs / MS_PER_DAY;
+  if (elapsedDays < 1) return "Today";
+  if (elapsedDays < 7) return `${Math.floor(elapsedDays)}d ago`;
+  if (elapsedDays < 30) return `${Math.floor(elapsedDays / 7)}w ago`;
+  return `${Math.floor(elapsedDays / 30)}mo ago`;
+}
+
 type ApiOk = { rows: WorkspaceContactPageRow[]; total: number };
 type ApiErr = { error?: string; hint?: string };
 
@@ -472,6 +503,9 @@ export function ContactsBrowsePanel() {
                 const sub = [c.organisation_name, c.role, c.geography]
                   .filter(Boolean)
                   .join(" · ");
+                const strength = recencyStrength(c.last_contact_date);
+                const activeDots = strength <= 0 ? 0 : Math.ceil(strength * 5);
+                const strengthPct = Math.round(strength * 100);
                 return (
                   <li key={c.id} className="py-1.5">
                     <button
@@ -488,11 +522,31 @@ export function ContactsBrowsePanel() {
                           <p className="text-sm font-semibold text-charcoal">{c.name}</p>
                           {muted(sub || null)}
                         </div>
-                        {c.organisation_type ? (
-                          <span className="rounded-full border border-charcoal/10 bg-cream-light px-2 py-0.5 text-xs text-charcoal-light">
-                            {c.organisation_type}
+                        <div className="ml-2 flex shrink-0 items-center gap-2">
+                          <div
+                            className="flex items-center gap-1"
+                            aria-label={`Recency strength ${strengthPct}%`}
+                          >
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <span
+                                key={i}
+                                className={`block size-1.5 rounded-full ${
+                                  i < activeDots
+                                    ? "bg-charcoal"
+                                    : "bg-charcoal/20"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-xs text-charcoal-light/75">
+                            {recencyLabel(c.last_contact_date)}
                           </span>
-                        ) : null}
+                          {c.organisation_type ? (
+                            <span className="rounded-full border border-charcoal/10 bg-cream-light px-2 py-0.5 text-xs text-charcoal-light">
+                              {c.organisation_type}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     </button>
                   </li>

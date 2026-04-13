@@ -51,6 +51,7 @@ begin
         'name', c.name,
         'role', c.role,
         'geography', c.geography,
+        'last_contact_date', c.last_contact_date,
         'organisation_id', c.organisation_id,
         'organisation_name', o.name,
         'organisation_type', o.type

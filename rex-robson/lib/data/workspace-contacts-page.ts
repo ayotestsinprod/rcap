@@ -29,6 +29,8 @@ function parseRpcPayload(data: unknown): WorkspaceContactsPageResult {
       name: String(x.name ?? ""),
       role: x.role == null ? null : String(x.role),
       geography: x.geography == null ? null : String(x.geography),
+      last_contact_date:
+        x.last_contact_date == null ? null : String(x.last_contact_date),
       organisation_id:
         x.organisation_id == null ? null : String(x.organisation_id),
       organisation_name:

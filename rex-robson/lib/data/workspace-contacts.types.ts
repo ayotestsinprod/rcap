@@ -6,6 +6,7 @@ export type WorkspaceContactPageRow = {
   name: string;
   role: string | null;
   geography: string | null;
+  last_contact_date: string | null;
   organisation_id: string | null;
   organisation_name: string | null;
   organisation_type: string | null;
