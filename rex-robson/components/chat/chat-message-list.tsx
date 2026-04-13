@@ -10,7 +10,7 @@ type ChatMessageListProps = {
 
 export function ChatMessageList({ messages }: ChatMessageListProps) {
   return (
-    <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-6 sm:px-8">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-6 sm:px-8">
       {messages.map((m) =>
         m.role === "user" ? (
           <div key={m.id} className="flex justify-end">

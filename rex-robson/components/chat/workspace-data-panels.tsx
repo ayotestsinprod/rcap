@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 import type {
-  WorkspaceContactRow,
   WorkspaceDealRow,
   WorkspaceOrganisationRow,
   WorkspaceSuggestionRow,
@@ -40,24 +39,6 @@ function muted(line: string | null | undefined) {
     <p className="mt-0.5 line-clamp-2 text-xs text-charcoal-light/85">
       {line}
     </p>
-  );
-}
-
-export function ContactsDataPanel({ rows }: { rows: WorkspaceContactRow[] }) {
-  return (
-    <PanelChrome title="Contacts" count={rows.length}>
-      {rows.map((c) => {
-        const org = c.organisations;
-        const orgName = Array.isArray(org) ? org[0]?.name : org?.name;
-        const sub = [c.role, orgName, c.geography].filter(Boolean).join(" · ");
-        return (
-          <li key={c.id} className="px-4 py-3">
-            <p className="text-sm font-medium text-charcoal">{c.name}</p>
-            {muted(sub || null)}
-          </li>
-        );
-      })}
-    </PanelChrome>
   );
 }
 

@@ -3,15 +3,6 @@ import { tryCreateServiceRoleClient } from "@/lib/supabase/service-role";
 
 const LIST_LIMIT = 80;
 
-export type WorkspaceContactRow = {
-  id: string;
-  name: string;
-  role: string | null;
-  geography: string | null;
-  /** Present when the embed query succeeds; omitted on fallback select. */
-  organisations?: { name: string } | { name: string }[] | null;
-};
-
 export type WorkspaceOrganisationRow = {
   id: string;
   name: string;
@@ -36,14 +27,12 @@ export type WorkspaceSuggestionRow = {
 };
 
 export type WorkspaceLists = {
-  contacts: WorkspaceContactRow[];
   organisations: WorkspaceOrganisationRow[];
   deals: WorkspaceDealRow[];
   suggestions: WorkspaceSuggestionRow[];
 };
 
 const empty: WorkspaceLists = {
-  contacts: [],
   organisations: [],
   deals: [],
   suggestions: [],
@@ -65,31 +54,6 @@ export async function getWorkspaceLists(): Promise<WorkspaceLists> {
   }
 
   try {
-    const contactsEmbedded = await client
-      .from("contacts")
-      .select("id,name,role,geography,organisations(name)")
-      .order("created_at", { ascending: false })
-      .limit(LIST_LIMIT);
-
-    const contactsPlain =
-      contactsEmbedded.error != null
-        ? await client
-            .from("contacts")
-            .select("id,name,role,geography")
-            .order("created_at", { ascending: false })
-            .limit(LIST_LIMIT)
-        : null;
-
-    if (contactsEmbedded.error != null && process.env.NODE_ENV === "development") {
-      console.warn(
-        "[rex-robson] contacts embed query failed, retrying without organisation name:",
-        contactsEmbedded.error.message,
-      );
-    }
-
-    const contactsRes =
-      contactsEmbedded.error == null ? contactsEmbedded : contactsPlain!;
-
     const [orgsRes, dealsRes, suggestionsRes] = await Promise.all([
       client
         .from("organisations")
@@ -110,13 +74,11 @@ export async function getWorkspaceLists(): Promise<WorkspaceLists> {
         .limit(LIST_LIMIT),
     ]);
 
-    if (contactsRes.error) throw contactsRes.error;
     if (orgsRes.error) throw orgsRes.error;
     if (dealsRes.error) throw dealsRes.error;
     if (suggestionsRes.error) throw suggestionsRes.error;
 
     return {
-      contacts: (contactsRes.data ?? []) as unknown as WorkspaceContactRow[],
       organisations: (orgsRes.data ?? []) as WorkspaceOrganisationRow[],
       deals: (dealsRes.data ?? []) as WorkspaceDealRow[],
       suggestions: (suggestionsRes.data ?? []) as WorkspaceSuggestionRow[],

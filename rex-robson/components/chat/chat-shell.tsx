@@ -13,8 +13,8 @@ import {
 import { ChatComposer } from "./chat-composer";
 import { ChatMessageList, type ChatMessage } from "./chat-message-list";
 import { ChatSidebar, type ChatNavId, type WorkspaceDisplayMode } from "./chat-sidebar";
+import { ContactsBrowsePanel } from "./contacts-browse-panel";
 import {
-  ContactsDataPanel,
   DealsDataPanel,
   OrganisationsDataPanel,
   SuggestionsDataPanel,
@@ -31,7 +31,6 @@ const ZERO_STATS: RexDashboardStats = {
 };
 
 const EMPTY_WORKSPACE: WorkspaceLists = {
-  contacts: [],
   organisations: [],
   deals: [],
   suggestions: [],
@@ -161,15 +160,15 @@ export function ChatShell({
   }, []);
 
   return (
-    <div className="flex min-h-[100dvh] flex-1 bg-cream">
+    <div className="flex h-dvh max-h-dvh flex-1 overflow-hidden bg-cream">
       <ChatSidebar
         activeId={activeNav}
         onNavigate={setActiveNav}
         workspaceDisplayMode={workspaceDisplayMode}
         onWorkspaceDisplayModeChange={persistWorkspaceDisplayMode}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-charcoal/[0.08] bg-cream-light/80 px-4 backdrop-blur-sm sm:px-6">
+      <div className="flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b border-charcoal/[0.08] bg-cream-light/80 px-4 backdrop-blur-sm sm:px-6">
           <div className="relative shrink-0">
             <div
               className="flex size-9 items-center justify-center rounded-full bg-charcoal font-sans text-xs font-semibold tracking-tight text-cream"
@@ -190,20 +189,28 @@ export function ChatShell({
             <p className="text-xs text-charcoal-light/80">Online</p>
           </div>
         </header>
-        <main className="flex min-h-0 flex-1 flex-col">
+        <main
+          className={
+            activeNav === "ask"
+              ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+              : "flex min-h-0 flex-1 flex-col overflow-y-auto"
+          }
+        >
           {activeNav === "ask" ? (
-            <>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <ChatMessageList messages={messages} />
-              <ChatComposer
-                onSubmitSearch={onSubmitSearch}
-                isBusy={searchBusy}
-              />
-            </>
+              <div className="shrink-0">
+                <ChatComposer
+                  onSubmitSearch={onSubmitSearch}
+                  isBusy={searchBusy}
+                />
+              </div>
+            </div>
           ) : activeNav === "contacts" ? (
             effectiveStats.contactCount === 0 ? (
               <RexVoicePanel title="Contacts" message={rexEmptyContacts} />
             ) : (
-              <ContactsDataPanel rows={effectiveWorkspace.contacts} />
+              <ContactsBrowsePanel />
             )
           ) : activeNav === "organisations" ? (
             effectiveStats.organisationCount === 0 ? (
