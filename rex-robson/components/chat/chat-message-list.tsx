@@ -1,28 +1,14 @@
-type Message = {
+export type ChatMessage = {
   id: string;
   role: "user" | "rex";
   text: string;
 };
 
-const demoMessages: Message[] = [
-  {
-    id: "1",
-    role: "rex",
-    text: "Hi — I’m Rex. Ask me anything about your pipeline, contacts, or deals.",
-  },
-  {
-    id: "2",
-    role: "user",
-    text: "Summarise open deals for this quarter.",
-  },
-  {
-    id: "3",
-    role: "rex",
-    text: "I’ll pull your active opportunities and group them by stage. Want me to include probability-weighted value?",
-  },
-];
+type ChatMessageListProps = {
+  messages: ChatMessage[];
+};
 
-export function ChatMessageList({ messages = demoMessages }: { messages?: Message[] }) {
+export function ChatMessageList({ messages }: ChatMessageListProps) {
   return (
     <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-6 sm:px-8">
       {messages.map((m) =>

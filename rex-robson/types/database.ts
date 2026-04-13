@@ -35,3 +35,11 @@ export type Deal = {
   created_at: string;
   embedding: string | null;
 };
+
+export type Suggestion = {
+  id: string;
+  title: string | null;
+  body: string | null;
+  status: "pending" | "dismissed" | "acted";
+  created_at: string;
+};
