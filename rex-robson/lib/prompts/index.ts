@@ -19,6 +19,11 @@ export {
   buildSearchUserContent,
 } from "./search";
 export type { BuildSearchSystemOptions } from "./search";
+export { buildSearchToolsSystemPrompt } from "./search-agent";
+export {
+  buildSearchReconciliationSystemPrompt,
+  buildSearchReconciliationUserContent,
+} from "./search-reconcile";
 export {
   buildVoiceAnthropicRequest,
   buildVoiceSystemPrompt,

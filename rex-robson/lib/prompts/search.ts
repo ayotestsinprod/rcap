@@ -3,8 +3,13 @@ import { REX_PERSONA_CORE } from "./persona";
 import { buildSurfacesSystemAddendum } from "./surfaces";
 import type { RexAnthropicRequest } from "./types";
 
+/** Legacy single-pass search (retrieval injected into system). Prefer tools + reconciliation in API. */
 const SEARCH_TASK = `
-The user initiated a workspace search. Interpret their query as search intent across contacts, organisations, deals, and notes (whatever tools or retrieval you are given). Prefer precise matches and short summaries; offer filters or refinements if the result set is large or ambiguous. Ask one clarifying question only if the query is empty or unusable.
+The user initiated a workspace search. Fixed database lookups produced the block titled "Deterministic workspace retrieval" in your instructions when present. Treat that block as the source of truth for what exists under that scan.
+
+Summarize what matched in Rex's voice; if nothing matched, say so and suggest sharper keywords. Do not invent records not listed there.
+
+If the result set is large or fuzzy, offer one concrete way to narrow the next search (e.g. sector, geography, deal status).
 `.trim();
 
 export type BuildSearchSystemOptions = {

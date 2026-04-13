@@ -1,15 +1,34 @@
-import { buildSearchAnthropicRequest } from "@/lib/prompts";
+import { buildWorkspaceRetrievalContext } from "@/lib/data/workspace-retrieval";
+import { createSearchSupabaseClient } from "@/lib/data/search-supabase";
+import {
+  buildSearchReconciliationSystemPrompt,
+  buildSearchReconciliationUserContent,
+} from "@/lib/prompts";
 import { completeAnthropicMessage } from "@/lib/rex/anthropic-messages";
+import { runWorkspaceSearchAgent } from "@/lib/rex/anthropic-workspace-agent";
 
 export const runtime = "nodejs";
 
 type Body = {
   query?: string;
+  /**
+   * When true, skip Anthropic and return only the deterministic retrieval block (for debugging).
+   */
+  deterministicOnly?: boolean;
+  /**
+   * When false, return the tool-assisted draft only (no reconciliation pass).
+   */
+  reconcile?: boolean;
+  /**
+   * Include deterministic baseline and draft in JSON (for debugging).
+   */
+  debug?: boolean;
 };
 
 /**
- * Experimental: builds the search-oriented system + user prompt, then calls Anthropic.
- * Wire the chat/search box here; later add Supabase retrieval into BuildSearchSystemOptions.retrievalContext.
+ * Search pipeline:
+ * 1) In parallel: deterministic full-scan on the user query + Anthropic tool-calling agent (same DB primitives).
+ * 2) Reconciliation: LLM aligns the draft with the deterministic baseline and returns one Rex reply.
  */
 export async function POST(req: Request) {
   let body: Body;
@@ -25,9 +44,52 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { system, messages } = buildSearchAnthropicRequest(query);
-    const text = await completeAnthropicMessage({ system, messages });
-    return Response.json({ text });
+    const supabase = await createSearchSupabaseClient();
+
+    const baselinePromise = buildWorkspaceRetrievalContext(supabase, query);
+    const agentPromise = runWorkspaceSearchAgent({
+      supabase,
+      userQuery: query,
+    });
+
+    const [baseline, draft] = await Promise.all([
+      baselinePromise,
+      agentPromise,
+    ]);
+
+    if (body.deterministicOnly === true) {
+      return Response.json({
+        text: baseline,
+        deterministicOnly: true,
+      });
+    }
+
+    const shouldReconcile = body.reconcile !== false;
+
+    if (!shouldReconcile) {
+      return Response.json({
+        text: draft,
+        ...(body.debug ? { baseline, draft } : {}),
+      });
+    }
+
+    const system = buildSearchReconciliationSystemPrompt();
+    const userContent = buildSearchReconciliationUserContent(
+      query,
+      baseline,
+      draft,
+    );
+
+    const text = await completeAnthropicMessage({
+      system,
+      messages: [{ role: "user", content: userContent }],
+      maxTokens: 2048,
+    });
+
+    return Response.json({
+      text,
+      ...(body.debug ? { baseline, draft } : {}),
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Search failed";
     return Response.json({ error: message }, { status: 502 });

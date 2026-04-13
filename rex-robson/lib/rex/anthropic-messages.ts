@@ -1,12 +1,5 @@
 import type { AnthropicTextMessage } from "@/lib/prompts/types";
-
-function getAnthropicApiKey(): string | undefined {
-  return (
-    process.env.ANTHROPIC_API_KEY ??
-    process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY ??
-    undefined
-  );
-}
+import { getAnthropicApiKey, getAnthropicModel } from "./anthropic-config";
 
 type MessagesResponse = {
   content?: Array<{ type: string; text?: string }>;
@@ -22,12 +15,7 @@ export async function completeAnthropicMessage(params: {
   maxTokens?: number;
 }): Promise<string> {
   const apiKey = getAnthropicApiKey();
-  if (!apiKey) {
-    throw new Error("Missing ANTHROPIC_API_KEY (or NEXT_PUBLIC_ANTHROPIC_API_KEY for local dev only).");
-  }
-
-  const model =
-    process.env.ANTHROPIC_MODEL ?? "claude-3-5-sonnet-20241022";
+  const model = getAnthropicModel();
   const max_tokens = params.maxTokens ?? 2048;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
