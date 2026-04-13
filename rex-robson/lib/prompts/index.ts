@@ -5,6 +5,7 @@
  * - Search: buildSearchAnthropicRequest / buildSearchSystemPrompt
  * - After Whisper: buildVoiceAnthropicRequest / buildVoiceUserContent
  * - Suggestions-focused UI: SUGGESTIONS_SURFACE_SYSTEM + buildChatSystemPrompt({ surfaceExtension })
+ * - File import: FILE_IMPORT_SURFACE_SYSTEM + buildChatSystemPrompt({ surfaceExtension })
  */
 
 export { joinPromptSections } from "./compose";
@@ -35,6 +36,7 @@ export {
   REX_VOICE_LLM_ADDENDUM,
 } from "./surfaces";
 export { SUGGESTIONS_SURFACE_SYSTEM } from "./suggestions";
+export { FILE_IMPORT_SURFACE_SYSTEM } from "./file-import";
 export { REX_PERSONA_CORE } from "./persona";
 export type {
   AnthropicMessageRole,

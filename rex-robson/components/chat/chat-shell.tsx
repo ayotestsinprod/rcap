@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { WorkspaceLists } from "@/lib/data/workspace-lists";
 import type { RexDashboardStats } from "@/lib/rex/voice";
-import { rexEmptySuggestions, rexEmptyUpload } from "@/lib/rex/voice";
+import { rexEmptySuggestions } from "@/lib/rex/voice";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessageList, type ChatMessage } from "./chat-message-list";
 import { ChatSidebar, type ChatNavId, type WorkspaceDisplayMode } from "./chat-sidebar";
@@ -11,6 +11,7 @@ import { ContactsBrowsePanel } from "./contacts-browse-panel";
 import { DealsBrowsePanel } from "./deals-browse-panel";
 import { EmailsBrowsePanel } from "./emails-browse-panel";
 import { OrganisationsBrowsePanel } from "./organisations-browse-panel";
+import { UploadImportPanel } from "./upload-import-panel";
 import { SuggestionsDataPanel } from "./workspace-data-panels";
 
 const WORKSPACE_DISPLAY_KEY = "rex-workspace-display";
@@ -213,9 +214,9 @@ export function ChatShell({
             ) : (
               <SuggestionsDataPanel rows={effectiveWorkspace.suggestions} />
             )
-          ) : (
-            <RexVoicePanel title="Upload & Import" message={rexEmptyUpload} />
-          )}
+          ) : activeNav === "upload" ? (
+            <UploadImportPanel onGoToSuggestions={() => setActiveNav("suggestions")} />
+          ) : null}
         </main>
       </div>
     </div>

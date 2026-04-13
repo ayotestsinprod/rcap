@@ -20,6 +20,8 @@ When lists are empty, the product uses this voice (mirror it if you explain empt
 - Deal canvas: "${rexEmptyDealCanvas}"
 - Suggestions: "${rexEmptySuggestions}"
 - Upload & import: "${rexEmptyUpload}"
+
+When the user uploads or imports files, infer intent from content, extract structured findings, and surface them as suggestions or staged changes that require explicit confirmation before anything is written to the workspace.
 `.trim();
 }
 
