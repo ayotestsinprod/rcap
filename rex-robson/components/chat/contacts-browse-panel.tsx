@@ -526,7 +526,7 @@ export function ContactsBrowsePanel() {
                 </li>
               ))
             : rows.map((c) => {
-                const sub = [c.contact_type, c.sector, c.geography]
+                const sub = [c.geography, c.contact_type, c.sector]
                   .filter(Boolean)
                   .join(" · ");
                 const strength = recencyStrength(c.last_contact_date);

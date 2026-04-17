@@ -44,6 +44,48 @@ function parseRpcPayload(data: unknown): WorkspaceContactsPageResult {
   return { rows, total };
 }
 
+/**
+ * Older `workspace_contacts_page` RPCs omit `contact_type` / `sector`. Merge from `contacts`
+ * so the list UI can show Geography · Type · Sector without requiring a DB migration replay.
+ */
+async function mergeContactTypeAndSectorFromTable(
+  client: SupabaseClient,
+  rows: WorkspaceContactPageRow[],
+): Promise<WorkspaceContactPageRow[]> {
+  if (rows.length === 0) return rows;
+  const ids = rows.map((r) => r.id).filter((id) => id.length > 0);
+  const { data, error } = await client
+    .from("contacts")
+    .select("id,contact_type,sector")
+    .in("id", ids);
+  if (error) {
+    // Column missing or RLS — keep RPC rows (42703 = undefined_column)
+    const code = (error as { code?: string }).code;
+    if (code === "42703" || code === "PGRST204") return rows;
+    throw error;
+  }
+  if (!data?.length) return rows;
+  const byId = new Map(
+    data.map((d) => [
+      String(d.id),
+      {
+        contact_type:
+          d.contact_type == null ? null : String(d.contact_type).trim() || null,
+        sector: d.sector == null ? null : String(d.sector).trim() || null,
+      },
+    ]),
+  );
+  return rows.map((r) => {
+    const extra = byId.get(r.id);
+    if (!extra) return r;
+    return {
+      ...r,
+      contact_type: extra.contact_type ?? r.contact_type,
+      sector: extra.sector ?? r.sector,
+    };
+  });
+}
+
 export async function fetchWorkspaceContactsPageWithClient(
   client: SupabaseClient,
   params: {
@@ -72,7 +114,9 @@ export async function fetchWorkspaceContactsPageWithClient(
     throw error;
   }
 
-  return parseRpcPayload(data);
+  const parsed = parseRpcPayload(data);
+  const rows = await mergeContactTypeAndSectorFromTable(client, parsed.rows);
+  return { rows, total: parsed.total };
 }
 
 /**
