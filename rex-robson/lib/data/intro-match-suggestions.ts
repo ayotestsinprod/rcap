@@ -1,7 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { insertWorkspaceSuggestion } from "@/lib/data/workspace-mutations";
 
-const PAIR_TAG_PREFIX = "rex_match_pair:v1:";
+const PAIR_TAG_V1_PREFIX = "rex_match_pair:v1:";
+const PAIR_TAG_V2_PREFIX = "rex_match_pair:v2:";
+
+const MIN_SCORE = 5;
+const PER_FOUNDER_CAP = 4;
+const PER_CAPITAL_CAP = 3;
+const GLOBAL_CAP = 25;
+const HIGH_WARMTH_SCORE = 7;
+const COLD_DAYS = 365;
+
+type Side = "founder" | "investor" | "lender";
+type CapitalSide = Extract<Side, "investor" | "lender">;
 
 type ContactForMatch = {
   id: string;
@@ -10,57 +21,216 @@ type ContactForMatch = {
   sector: string | null;
   sectors: string[] | null;
   role: string | null;
+  deal_types: string[] | null;
+  min_deal_size: number | null;
+  max_deal_size: number | null;
+  geography: string | null;
+  relationship_score: number | null;
+  last_contact_date: string | null;
 };
 
-function founderInvestorSide(c: ContactForMatch): "founder" | "investor" | null {
+type MatchKind = "founder_investor" | "founder_lender";
+
+type Candidate = {
+  founder: ContactForMatch;
+  capital: ContactForMatch;
+  capitalSide: CapitalSide;
+  kind: MatchKind;
+  score: number;
+  reasons: string[];
+  sectorOverlap: string[];
+  dealTypeOverlap: string[];
+  sizeOverlap: { capMin: number; capMax: number; foundMin: number; foundMax: number } | null;
+  geoOverlap: string[];
+};
+
+function contactSide(c: ContactForMatch): Side | null {
   const t = (c.contact_type ?? "").toLowerCase();
   const r = (c.role ?? "").toLowerCase();
-  const typeHit = (s: string) => t.includes(s) || r.includes(s);
-  if (typeHit("founder")) return "founder";
-  if (typeHit("investor")) return "investor";
+  const hit = (s: string) => t.includes(s) || r.includes(s);
+  if (hit("founder")) return "founder";
+  if (hit("lender") || hit("debt") || hit("credit") || hit("bank"))
+    return "lender";
+  if (hit("investor") || hit("vc") || hit("lp")) return "investor";
   return null;
 }
 
-function sectorSet(c: ContactForMatch): Set<string> {
-  const s = new Set<string>();
-  if (c.sector?.trim()) s.add(c.sector.trim().toLowerCase());
-  for (const x of c.sectors ?? []) {
-    const v = String(x).trim().toLowerCase();
-    if (v) s.add(v);
-  }
-  return s;
+function normalizeTokens(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .toLowerCase()
+    .split(/[,\/\s]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
-function sectorsOverlap(a: ContactForMatch, b: ContactForMatch): boolean {
-  const A = sectorSet(a);
-  const B = sectorSet(b);
-  if (A.size === 0 || B.size === 0) return false;
-  for (const x of A) {
-    if (B.has(x)) return true;
+function sectorSet(c: ContactForMatch): Set<string> {
+  const out = new Set<string>();
+  if (c.sector?.trim()) out.add(c.sector.trim().toLowerCase());
+  for (const x of c.sectors ?? []) {
+    const v = String(x).trim().toLowerCase();
+    if (v) out.add(v);
   }
-  return false;
+  return out;
+}
+
+function dealTypeSet(c: ContactForMatch): Set<string> {
+  const out = new Set<string>();
+  for (const x of c.deal_types ?? []) {
+    const v = String(x).trim().toLowerCase();
+    if (v) out.add(v);
+  }
+  return out;
+}
+
+function intersect(a: Set<string>, b: Set<string>): string[] {
+  const out: string[] = [];
+  for (const x of a) {
+    if (b.has(x)) out.push(x);
+  }
+  return out;
+}
+
+function titleCase(s: string): string {
+  return s.replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function sizeRangesOverlap(
+  a: ContactForMatch,
+  b: ContactForMatch,
+): { capMin: number; capMax: number; foundMin: number; foundMax: number } | null {
+  const aMin = a.min_deal_size;
+  const aMax = a.max_deal_size;
+  const bMin = b.min_deal_size;
+  const bMax = b.max_deal_size;
+  if (aMin == null && aMax == null && bMin == null && bMax == null) return null;
+  const lowA = aMin ?? 0;
+  const highA = aMax ?? Number.POSITIVE_INFINITY;
+  const lowB = bMin ?? 0;
+  const highB = bMax ?? Number.POSITIVE_INFINITY;
+  if (lowA <= highB && lowB <= highA) {
+    return { capMin: lowA, capMax: highA, foundMin: lowB, foundMax: highB };
+  }
+  return null;
+}
+
+function daysSince(iso: string | null): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  return Math.floor((Date.now() - t) / (24 * 60 * 60 * 1000));
+}
+
+function formatGbp(n: number): string {
+  if (!Number.isFinite(n)) return "any";
+  if (n >= 1_000_000) return `£${(Math.round(n / 100_000) / 10).toLocaleString()}M`;
+  if (n >= 1_000) return `£${(Math.round(n / 100) / 10).toLocaleString()}K`;
+  return `£${Math.round(n).toLocaleString()}`;
+}
+
+function scorePair(
+  founder: ContactForMatch,
+  capital: ContactForMatch,
+): Omit<Candidate, "founder" | "capital" | "capitalSide" | "kind"> {
+  let score = 0;
+  const reasons: string[] = [];
+
+  const sectorOverlap = intersect(sectorSet(founder), sectorSet(capital));
+  if (sectorOverlap.length > 0) {
+    const bump = Math.min(sectorOverlap.length, 2) * 2;
+    score += bump;
+    reasons.push(`Sector: ${sectorOverlap.map(titleCase).join(", ")}`);
+  }
+
+  const dealTypeOverlap = intersect(dealTypeSet(founder), dealTypeSet(capital));
+  if (dealTypeOverlap.length > 0) {
+    const bump = Math.min(dealTypeOverlap.length, 2) * 2;
+    score += bump;
+    reasons.push(`Deal type: ${dealTypeOverlap.map(titleCase).join(", ")}`);
+  }
+
+  const sizeOverlap = sizeRangesOverlap(capital, founder);
+  if (sizeOverlap) {
+    score += 3;
+    const capRange = `${formatGbp(sizeOverlap.capMin)}–${formatGbp(sizeOverlap.capMax)}`;
+    const foundRange = `${formatGbp(sizeOverlap.foundMin)}–${formatGbp(sizeOverlap.foundMax)}`;
+    reasons.push(`Cheque: ${capRange} appetite fits ${foundRange} need`);
+  }
+
+  const geoOverlap = intersect(
+    new Set(normalizeTokens(founder.geography)),
+    new Set(normalizeTokens(capital.geography)),
+  );
+  if (geoOverlap.length > 0) {
+    score += 2;
+    reasons.push(`Geography: ${geoOverlap.map(titleCase).join(", ")}`);
+  }
+
+  const fScore = founder.relationship_score ?? 0;
+  const cScore = capital.relationship_score ?? 0;
+  if (fScore >= HIGH_WARMTH_SCORE || cScore >= HIGH_WARMTH_SCORE) {
+    score += 1;
+    reasons.push(`Warm side: score ${Math.max(fScore, cScore)}`);
+  }
+
+  const fDays = daysSince(founder.last_contact_date);
+  const cDays = daysSince(capital.last_contact_date);
+  if (fDays != null && cDays != null && fDays > COLD_DAYS && cDays > COLD_DAYS) {
+    score -= 1;
+    reasons.push(`Cold: both last contacted >${COLD_DAYS}d ago`);
+  }
+
+  return {
+    score,
+    reasons,
+    sectorOverlap,
+    dealTypeOverlap,
+    sizeOverlap,
+    geoOverlap,
+  };
 }
 
 function pairKey(idA: string, idB: string): string {
   return [idA, idB].sort().join(":");
 }
 
-async function loadExistingPairKeys(
+function dedupeTagForCandidate(c: Candidate): string {
+  return `${PAIR_TAG_V2_PREFIX}${c.kind}:${pairKey(c.founder.id, c.capital.id)}`;
+}
+
+/**
+ * Loads every tag-keyed dedupe string across statuses so we never re-emit a
+ * pair the user has already seen (pending), dismissed, or acted on.
+ * Accepts both v1 (`rex_match_pair:v1:<pk>`) and v2
+ * (`rex_match_pair:v2:<kind>:<pk>`) tags.
+ */
+async function loadExistingDedupeKeys(
   client: SupabaseClient,
 ): Promise<Set<string>> {
   const keys = new Set<string>();
   const { data, error } = await client
     .from("suggestions")
-    .select("body")
-    .eq("status", "pending")
-    .ilike("body", `${PAIR_TAG_PREFIX}%`);
+    .select("body,status")
+    .or(
+      `body.ilike.${PAIR_TAG_V1_PREFIX}%,body.ilike.${PAIR_TAG_V2_PREFIX}%`,
+    );
   if (error) throw error;
   for (const row of data ?? []) {
-    const body = row.body == null ? "" : String(row.body);
+    const body = (row as { body: string | null }).body ?? "";
     const line = body.split("\n")[0]?.trim() ?? "";
-    if (!line.startsWith(PAIR_TAG_PREFIX)) continue;
-    const rest = line.slice(PAIR_TAG_PREFIX.length);
-    if (rest.includes(":")) keys.add(rest);
+    if (line.startsWith(PAIR_TAG_V2_PREFIX)) {
+      keys.add(line);
+      const parts = line.slice(PAIR_TAG_V2_PREFIX.length).split(":");
+      if (parts.length >= 3) {
+        const pk = parts.slice(1).join(":");
+        keys.add(`${PAIR_TAG_V1_PREFIX}${pk}`);
+      }
+    } else if (line.startsWith(PAIR_TAG_V1_PREFIX)) {
+      keys.add(line);
+      const pk = line.slice(PAIR_TAG_V1_PREFIX.length);
+      keys.add(`${PAIR_TAG_V2_PREFIX}founder_investor:${pk}`);
+      keys.add(`${PAIR_TAG_V2_PREFIX}founder_lender:${pk}`);
+    }
   }
   return keys;
 }
@@ -70,10 +240,12 @@ async function fetchAllContactsForMatching(
 ): Promise<ContactForMatch[]> {
   const pageSize = 1000;
   const out: ContactForMatch[] = [];
+  const columns =
+    "id,name,contact_type,sector,sectors,role,deal_types,min_deal_size,max_deal_size,geography,relationship_score,last_contact_date";
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await client
       .from("contacts")
-      .select("id,name,contact_type,sector,sectors,role")
+      .select(columns)
       .order("id", { ascending: true })
       .range(from, from + pageSize - 1);
     if (error) throw error;
@@ -85,63 +257,163 @@ async function fetchAllContactsForMatching(
   return out;
 }
 
-const MAX_NEW_SUGGESTIONS_PER_RUN = 500;
+function buildSuggestionBody(c: Candidate): string {
+  const tag = dedupeTagForCandidate(c);
+  const headline = `**${c.founder.name}** (founder) <> **${c.capital.name}** (${c.capitalSide})`;
+
+  const why: string[] = [];
+  if (c.sectorOverlap.length > 0)
+    why.push(`- Sector: ${c.sectorOverlap.map(titleCase).join(", ")}`);
+  if (c.dealTypeOverlap.length > 0)
+    why.push(`- Deal type: ${c.dealTypeOverlap.map(titleCase).join(", ")}`);
+  if (c.sizeOverlap) {
+    const capRange = `${formatGbp(c.sizeOverlap.capMin)}–${formatGbp(c.sizeOverlap.capMax)}`;
+    const foundRange = `${formatGbp(c.sizeOverlap.foundMin)}–${formatGbp(c.sizeOverlap.foundMax)}`;
+    why.push(`- Cheque: ${capRange} appetite fits ${foundRange} need`);
+  }
+  if (c.geoOverlap.length > 0)
+    why.push(`- Geography: ${c.geoOverlap.map(titleCase).join(", ")}`);
+
+  const warmth: string[] = [];
+  const founderLine = warmthLine(c.founder);
+  const capitalLine = warmthLine(c.capital);
+  if (founderLine) warmth.push(`- ${c.founder.name}: ${founderLine}`);
+  if (capitalLine) warmth.push(`- ${c.capital.name}: ${capitalLine}`);
+
+  const lines: string[] = [tag, "", headline];
+  if (why.length > 0) lines.push("", "Why this match", ...why);
+  if (warmth.length > 0) lines.push("", "Warmth", ...warmth);
+  return lines.join("\n");
+}
+
+function warmthLine(c: ContactForMatch): string | null {
+  const parts: string[] = [];
+  if (c.last_contact_date) {
+    const days = daysSince(c.last_contact_date);
+    parts.push(
+      `last contacted ${c.last_contact_date}${days != null ? ` (${days}d ago)` : ""}`,
+    );
+  }
+  if (c.relationship_score != null) {
+    parts.push(`score ${c.relationship_score}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function topReasonLabel(c: Candidate): string {
+  if (c.sectorOverlap.length > 0) return titleCase(c.sectorOverlap[0]);
+  if (c.dealTypeOverlap.length > 0) return titleCase(c.dealTypeOverlap[0]);
+  if (c.sizeOverlap) return "size fit";
+  if (c.geoOverlap.length > 0) return titleCase(c.geoOverlap[0]);
+  return "shared context";
+}
+
+function buildSuggestionTitle(c: Candidate): string {
+  return `Intro: ${c.founder.name} <> ${c.capital.name} (${c.capitalSide}, ${topReasonLabel(c)})`;
+}
+
+export type GenerateIntroMatchesResult = {
+  created: number;
+  skippedDuplicates: number;
+  skippedBelowThreshold: number;
+  runMs: number;
+};
 
 /**
- * Creates pending suggestions for founder ↔ investor pairs that share at least one sector label.
+ * Creates pending suggestions for founder <> investor and founder <> lender
+ * pairs that exceed the minimum match score. Ranks globally, then applies
+ * per-side and global caps so the Suggestions tab stays a curated shortlist.
  */
 export async function generateIntroMatchSuggestions(
   client: SupabaseClient,
-): Promise<{ created: number; skippedDuplicates: number }> {
+): Promise<GenerateIntroMatchesResult> {
+  const startedAt = Date.now();
   const [contacts, existingKeys] = await Promise.all([
     fetchAllContactsForMatching(client),
-    loadExistingPairKeys(client),
+    loadExistingDedupeKeys(client),
   ]);
 
   const founders: ContactForMatch[] = [];
   const investors: ContactForMatch[] = [];
+  const lenders: ContactForMatch[] = [];
   for (const c of contacts) {
-    const side = founderInvestorSide(c);
+    const side = contactSide(c);
     if (side === "founder") founders.push(c);
     else if (side === "investor") investors.push(c);
+    else if (side === "lender") lenders.push(c);
   }
+
+  const candidates: Candidate[] = [];
+  let skippedBelowThreshold = 0;
+
+  const buildPairs = (capitalPool: ContactForMatch[], capitalSide: CapitalSide) => {
+    const kind: MatchKind =
+      capitalSide === "investor" ? "founder_investor" : "founder_lender";
+    for (const f of founders) {
+      for (const cap of capitalPool) {
+        if (f.id === cap.id) continue;
+        const scored = scorePair(f, cap);
+        if (scored.score < MIN_SCORE) {
+          skippedBelowThreshold += 1;
+          continue;
+        }
+        candidates.push({
+          founder: f,
+          capital: cap,
+          capitalSide,
+          kind,
+          ...scored,
+        });
+      }
+    }
+  };
+
+  buildPairs(investors, "investor");
+  buildPairs(lenders, "lender");
+
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const aWarm = Math.max(
+      a.founder.relationship_score ?? 0,
+      a.capital.relationship_score ?? 0,
+    );
+    const bWarm = Math.max(
+      b.founder.relationship_score ?? 0,
+      b.capital.relationship_score ?? 0,
+    );
+    return bWarm - aWarm;
+  });
 
   let created = 0;
   let skippedDuplicates = 0;
+  const perFounder = new Map<string, number>();
+  const perCapital = new Map<string, number>();
 
-  outer: for (const f of founders) {
-    for (const inv of investors) {
-      if (created >= MAX_NEW_SUGGESTIONS_PER_RUN) break outer;
-      if (f.id === inv.id) continue;
-      if (!sectorsOverlap(f, inv)) continue;
-      const pk = pairKey(f.id, inv.id);
-      if (existingKeys.has(pk)) {
-        skippedDuplicates += 1;
-        continue;
-      }
-
-      const overlapLabels = [...sectorSet(f)].filter((x) =>
-        sectorSet(inv).has(x),
-      );
-      const sectorLabel =
-        overlapLabels[0]?.replace(/\b\w/g, (ch) => ch.toUpperCase()) ??
-        "Shared sector";
-
-      const title = `Intro: ${f.name} ↔ ${inv.name} (${sectorLabel})`;
-      const tag = `${PAIR_TAG_PREFIX}${pk}`;
-      const body = [
-        tag,
-        "",
-        `Potential intro: **${f.name}** (founder-side) and **${inv.name}** (investor-side) both touch **${sectorLabel}**.`,
-        "",
-        `Review fit and warm paths before connecting.`,
-      ].join("\n");
-
-      await insertWorkspaceSuggestion(client, { title, body });
-      existingKeys.add(pk);
-      created += 1;
+  for (const cand of candidates) {
+    if (created >= GLOBAL_CAP) break;
+    const tag = dedupeTagForCandidate(cand);
+    if (existingKeys.has(tag)) {
+      skippedDuplicates += 1;
+      continue;
     }
+    const fCount = perFounder.get(cand.founder.id) ?? 0;
+    if (fCount >= PER_FOUNDER_CAP) continue;
+    const cCount = perCapital.get(cand.capital.id) ?? 0;
+    if (cCount >= PER_CAPITAL_CAP) continue;
+
+    const title = buildSuggestionTitle(cand);
+    const body = buildSuggestionBody(cand);
+    await insertWorkspaceSuggestion(client, { title, body });
+    existingKeys.add(tag);
+    perFounder.set(cand.founder.id, fCount + 1);
+    perCapital.set(cand.capital.id, cCount + 1);
+    created += 1;
   }
 
-  return { created, skippedDuplicates };
+  return {
+    created,
+    skippedDuplicates,
+    skippedBelowThreshold,
+    runMs: Date.now() - startedAt,
+  };
 }

@@ -513,6 +513,20 @@ export async function insertWorkspaceSuggestion(
   };
 }
 
+export type SuggestionStatus = "pending" | "dismissed" | "acted";
+
+export async function updateWorkspaceSuggestionStatus(
+  client: SupabaseClient,
+  id: string,
+  status: SuggestionStatus,
+): Promise<void> {
+  const { error } = await client
+    .from("suggestions")
+    .update({ status })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export type CreatedRexTaskRow = {
   id: string;
   title: string;

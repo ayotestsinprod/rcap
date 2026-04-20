@@ -5,9 +5,25 @@
 
 export type AnthropicMessageRole = "user" | "assistant";
 
+export type AnthropicTextBlock = { type: "text"; text: string };
+
+export type AnthropicDocumentBlock = {
+  type: "document";
+  source: {
+    type: "base64";
+    media_type: "application/pdf";
+    data: string;
+  };
+  title?: string;
+};
+
+export type AnthropicContentBlock =
+  | AnthropicTextBlock
+  | AnthropicDocumentBlock;
+
 export type AnthropicTextMessage = {
   role: AnthropicMessageRole;
-  content: string;
+  content: string | AnthropicContentBlock[];
 };
 
 export type RexAnthropicRequest = {

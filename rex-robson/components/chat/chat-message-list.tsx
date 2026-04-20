@@ -1,12 +1,25 @@
+import { Paperclip } from "lucide-react";
 import type React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+export type ChatMessageAttachment = {
+  name: string;
+  sizeBytes: number;
+};
 
 export type ChatMessage = {
   id: string;
   role: "user" | "rex";
   text: string;
+  attachments?: ChatMessageAttachment[];
 };
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 type ChatMessageListProps = {
   messages: ChatMessage[];
@@ -53,7 +66,32 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
               role="article"
               aria-label="You"
             >
-              {m.text}
+              {m.text ? <p className="whitespace-pre-wrap">{m.text}</p> : null}
+              {m.attachments && m.attachments.length > 0 ? (
+                <ul
+                  className={
+                    "flex flex-col gap-1 " +
+                    (m.text ? "mt-2 border-t border-cream/15 pt-2" : "")
+                  }
+                >
+                  {m.attachments.map((a, i) => (
+                    <li
+                      key={`${a.name}:${i}`}
+                      className="flex items-center gap-1.5 text-xs text-cream/85"
+                    >
+                      <Paperclip
+                        className="size-3.5 shrink-0"
+                        strokeWidth={1.75}
+                        aria-hidden
+                      />
+                      <span className="truncate">{a.name}</span>
+                      <span className="shrink-0 text-cream/60">
+                        {formatBytes(a.sizeBytes)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           </div>
         ) : (

@@ -2,7 +2,6 @@
 
 import {
   Building2,
-  FileUp,
   LayoutDashboard,
   LayoutGrid,
   ListTodo,
@@ -19,7 +18,6 @@ const navItems = [
   { id: "deal-canvas", label: "Deal Canvas", icon: LayoutGrid },
   { id: "tasks", label: "Tasks", icon: ListTodo },
   { id: "suggestions", label: "Suggestions", icon: Sparkles },
-  { id: "upload", label: "Upload & Import", icon: FileUp },
 ] as const;
 
 export type ChatNavId = (typeof navItems)[number]["id"];

@@ -7,7 +7,6 @@ import {
 } from "@/lib/data/dashboard-metrics.types";
 import type { WorkspaceLists } from "@/lib/data/workspace-lists";
 import type { RexDashboardStats } from "@/lib/rex/voice";
-import { rexEmptySuggestions } from "@/lib/rex/voice";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessageList, type ChatMessage } from "./chat-message-list";
 import { ChatSidebar, type ChatNavId, type WorkspaceDisplayMode } from "./chat-sidebar";
@@ -16,8 +15,7 @@ import { DashboardPanel } from "./dashboard-panel";
 import { DealsBrowsePanel } from "./deals-browse-panel";
 import { OrganisationsBrowsePanel } from "./organisations-browse-panel";
 import { RexTasksPanel } from "./rex-tasks-panel";
-import { UploadImportPanel } from "./upload-import-panel";
-import { SuggestionsDataPanel } from "./workspace-data-panels";
+import { SuggestionsPanel } from "./suggestions-panel";
 
 const WORKSPACE_DISPLAY_KEY = "rex-workspace-display";
 
@@ -42,25 +40,6 @@ type ChatShellProps = {
   metrics: DashboardMetrics;
 };
 
-function RexVoicePanel({
-  title,
-  message,
-}: {
-  title: string;
-  message: string;
-}) {
-  return (
-    <div className="flex flex-1 flex-col justify-center px-4 py-10 sm:px-8">
-      <h2 className="font-serif text-xl tracking-tight text-charcoal">
-        {title}
-      </h2>
-      <p className="mt-4 max-w-md text-[15px] leading-relaxed text-charcoal-light">
-        {message}
-      </p>
-    </div>
-  );
-}
-
 export function ChatShell({
   openingGreeting,
   stats,
@@ -74,11 +53,16 @@ export function ChatShell({
   const [searchBusy, setSearchBusy] = useState(false);
   const [workspaceDisplayMode, setWorkspaceDisplayMode] =
     useState<WorkspaceDisplayMode>("live");
-  const [contactsCreateSignal, setContactsCreateSignal] = useState(0);
+  const [pendingContactsAutoCreate, setPendingContactsAutoCreate] =
+    useState(false);
 
   const onAddContactFromDashboard = useCallback(() => {
     setActiveNav("contacts");
-    setContactsCreateSignal((n) => n + 1);
+    setPendingContactsAutoCreate(true);
+  }, []);
+
+  const onContactsAutoCreateHandled = useCallback(() => {
+    setPendingContactsAutoCreate(false);
   }, []);
 
   useEffect(() => {
@@ -108,22 +92,41 @@ export function ChatShell({
   const effectiveMetrics =
     workspaceDisplayMode === "empty" ? ZERO_DASHBOARD_METRICS : metrics;
 
-  const onSubmitSearch = useCallback(async (query: string) => {
+  const onSubmitSearch = useCallback(async (query: string, files: File[]) => {
     const userId =
       typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : `user-${Date.now()}`;
     setMessages((prev) => [
       ...prev,
-      { id: userId, role: "user", text: query },
+      {
+        id: userId,
+        role: "user",
+        text: query,
+        attachments:
+          files.length > 0
+            ? files.map((f) => ({ name: f.name, sizeBytes: f.size }))
+            : undefined,
+      },
     ]);
     setSearchBusy(true);
     try {
-      const res = await fetch("/api/rex/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
+      const hasFiles = files.length > 0;
+      const init: RequestInit = hasFiles
+        ? (() => {
+            const fd = new FormData();
+            fd.append("query", query);
+            for (const f of files) {
+              fd.append("documents", f, f.name);
+            }
+            return { method: "POST", body: fd };
+          })()
+        : {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query }),
+          };
+      const res = await fetch("/api/rex/search", init);
       const data = (await res.json()) as { text?: string; error?: string };
       const rexId =
         typeof crypto !== "undefined" && crypto.randomUUID
@@ -209,6 +212,7 @@ export function ChatShell({
             <DashboardPanel
               metrics={effectiveMetrics}
               onAddContact={onAddContactFromDashboard}
+              onOpenSuggestions={() => setActiveNav("suggestions")}
             />
           ) : activeNav === "ask" ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -221,7 +225,10 @@ export function ChatShell({
               </div>
             </div>
           ) : activeNav === "contacts" ? (
-            <ContactsBrowsePanel createSignal={contactsCreateSignal} />
+            <ContactsBrowsePanel
+              autoOpenCreate={pendingContactsAutoCreate}
+              onAutoOpenCreateHandled={onContactsAutoCreateHandled}
+            />
           ) : activeNav === "organisations" ? (
             <OrganisationsBrowsePanel />
           ) : activeNav === "deal-canvas" ? (
@@ -229,13 +236,10 @@ export function ChatShell({
           ) : activeNav === "tasks" ? (
             <RexTasksPanel />
           ) : activeNav === "suggestions" ? (
-            effectiveStats.suggestionsPendingCount === 0 ? (
-              <RexVoicePanel title="Suggestions" message={rexEmptySuggestions} />
-            ) : (
-              <SuggestionsDataPanel rows={effectiveWorkspace.suggestions} />
-            )
-          ) : activeNav === "upload" ? (
-            <UploadImportPanel onGoToSuggestions={() => setActiveNav("suggestions")} />
+            <SuggestionsPanel
+              rows={effectiveWorkspace.suggestions}
+              isEmpty={effectiveStats.suggestionsPendingCount === 0}
+            />
           ) : null}
         </main>
       </div>

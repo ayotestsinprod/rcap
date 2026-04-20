@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { generateIntroMatchSuggestions } from "@/lib/data/intro-match-suggestions";
 import { getWorkspaceWriteClient } from "@/lib/data/workspace-mutations";
 
+export const runtime = "nodejs";
+
 /**
- * On-demand: scan contacts for founder ↔ investor pairs in overlapping sectors and insert pending suggestions.
+ * On-demand: scan contacts for founder <> investor and founder <> lender pairs
+ * that clear the match-score threshold and insert pending suggestions.
  */
 export async function POST() {
   try {
